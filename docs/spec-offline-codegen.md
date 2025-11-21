@@ -1,46 +1,66 @@
 # Convex CLI: Offline Codegen Enhancement Specification
 
-**Date:** 2025-11-21
-**Status:** Proposal
-**Related Branch:** `claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA`
-**Related GitHub Issue:** [#73 - Offline development error](https://github.com/get-convex/convex-js/issues/73)
+**Date:** 2025-11-21 **Status:** Proposal **Related Branch:**
+`claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA` **Related GitHub Issue:** [#73 -
+Offline development error](https://github.com/get-convex/convex-js/issues/73)
 
----
+* * *
 
 ## 1. Executive Summary
 
-**Problem:** `npx convex codegen` currently requires a backend connection and authentication to generate TypeScript types, making it unsuitable for CI/CD pipelines and AI agent development workflows that need offline, no-auth code generation.
+**Problem:** `npx convex codegen` currently requires a backend connection and
+authentication to generate TypeScript types, making it unsuitable for CI/CD pipelines
+and AI agent development workflows that need offline, no-auth code generation.
 
-**Solution:** Add an `--offline` flag to `npx convex codegen` that generates types purely from local files without requiring backend communication or authentication.
+**Solution:** Add an `--offline` flag to `npx convex codegen` that generates types
+purely from local files without requiring backend communication or authentication.
 
-**Key Finding:** **Offline mode provides identical type safety to backend mode** for standard applications (without components). The CLI already has a dynamic type generation system that uses TypeScript's type inference to provide full type safety from local files.
+**Key Finding:** **Offline mode provides identical type safety to backend mode** for
+standard applications (without components).
+The CLI already has a dynamic type generation system that uses TypeScript’s type
+inference to provide full type safety from local files.
 
-**Impact:** Enables fully offline CI/CD type checking, simplifies agent/automation workflows, and reduces dependency on network connectivity for code generation.
+**Impact:** Enables fully offline CI/CD type checking, simplifies agent/automation
+workflows, and reduces dependency on network connectivity for code generation.
 
----
+* * *
 
 ## 2. Background
 
 ### 2.1 What is Convex Codegen?
 
-Convex generates TypeScript type definitions in the `convex/_generated/` directory that provide type-safe access to:
+Convex generates TypeScript type definitions in the `convex/_generated/` directory that
+provide type-safe access to:
+
 - **Data models** (`dataModel.ts`): Table schemas, document types, field paths, indexes
+
 - **API functions** (`api.ts`): Query, mutation, and action function signatures
+
 - **Server utilities** (`server.ts`): Type-safe database and utility imports
+
 - **Components** (`component.ts`): Component-specific types for modular apps
 
 ### 2.2 What are Convex Components?
 
-**Convex Components** are independent, modular TypeScript building blocks for your backend. They are:
+**Convex Components** are independent, modular TypeScript building blocks for your
+backend. They are:
+
 - Installed from npm (e.g., `npm install @convex-dev/auth`)
+
 - Run in their own sandbox with their own functions, schema, and data
+
 - Called from your app like `components.auth.signIn({ ... })`
+
 - Similar to microservices but with transactional guarantees
 
 **Examples:**
+
 - Authentication: `@convex-dev/auth`
+
 - Rate limiting: `@convex-dev/ratelimit`
+
 - Payments: Payment processing components
+
 - Custom components you build and publish
 
 **Typical Usage:**
@@ -56,32 +76,43 @@ export const signUp = mutation({
 });
 ```
 
-Most Convex apps **do not use components** - they're for advanced modular architectures.
+Most Convex apps **do not use components** - they’re for advanced modular architectures.
 
 ### 2.3 Current Architecture
 
 The codegen process is split into two phases:
 
 #### Phase 1: Initial Codegen (Local)
+
 **Location:** `src/cli/lib/codegen.ts:doInitialComponentCodegen()`
 
 Generates **stub/placeholder** types that allow code to compile:
+
 - Creates basic `dataModel.d.ts` with generic types
+
 - Creates basic `api.d.ts` using `ApiFromModules<>` utility type
+
 - Creates `server.d.ts` with standard imports
+
 - **No backend required** - purely local file scanning
 
 #### Phase 2: Final Codegen (Backend-Dependent)
+
 **Location:** `src/cli/lib/codegen.ts:doFinalComponentCodegen()`
 
 Generates **precise, analyzed** types from backend analysis:
+
 - Bundles code locally via esbuild
+
 - Uploads to deployment via `/api/deploy2/start_push`
+
 - Backend analyzes schemas, validates types, extracts function signatures
+
 - Returns `StartPushResponse` with analysis results
+
 - Generates final types from analysis
 
----
+* * *
 
 ## 3. Critical Discovery: Dynamic Mode Already Provides Full Type Safety
 
@@ -103,6 +134,7 @@ Convex CLI supports two codegen modes, configured in `convex.json`:
 ### 3.2 How Dynamic Mode Works
 
 #### Dynamic Data Model (Offline-Compatible)
+
 **Location:** `src/cli/codegen_templates/dataModel.ts:74-116`
 
 ```typescript
@@ -115,12 +147,17 @@ export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 ```
 
 **What this means:**
+
 - Imports your `convex/schema.ts` file directly
-- Uses TypeScript's `DataModelFromSchemaDefinition` utility type
+
+- Uses TypeScript’s `DataModelFromSchemaDefinition` utility type
+
 - TypeScript compiler extracts all table names, field types, indexes from your schema
+
 - **Result: Identical type safety to static mode!**
 
 #### Dynamic API (Offline-Compatible)
+
 **Location:** `src/cli/codegen_templates/component_api.ts:358-392`
 
 ```typescript
@@ -138,16 +175,21 @@ export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "publ
 ```
 
 **What this means:**
+
 - Scans all `.ts`/`.js` files in your `convex/` directory
-- Imports each module's types directly
-- Uses TypeScript's type inference via `ApiFromModules` utility type
+
+- Imports each module’s types directly
+
+- Uses TypeScript’s type inference via `ApiFromModules` utility type
+
 - TypeScript compiler extracts function signatures, argument types, return types
+
 - **Result: Identical type safety to static mode!**
 
 ### 3.3 Type Safety Comparison
 
 | Feature | Static Mode (Backend) | Dynamic Mode (Offline) |
-|---------|----------------------|------------------------|
+| --- | --- | --- |
 | **Requires Backend** | ✅ Yes | ❌ No |
 | **Table Name Autocomplete** | ✅ Yes | ✅ Yes (identical) |
 | **Document Field Types** | ✅ Yes | ✅ Yes (identical) |
@@ -165,7 +207,7 @@ export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "publ
 
 **Bottom Line:** For apps without components, dynamic mode = static mode in type safety!
 
----
+* * *
 
 ## 4. What You Actually Lose with Offline Mode
 
@@ -187,22 +229,32 @@ export declare const components: AnyComponents;  // Basically `any`
 ```
 
 **What This Means:**
-- If you use Convex Components (modular npm packages like `@convex-dev/auth`), you lose type safety for `components.*` calls
-- Your editor won't autocomplete component function names
-- TypeScript won't check component function arguments/returns
-- **Most apps don't use components**, so this doesn't affect them
+
+- If you use Convex Components (modular npm packages like `@convex-dev/auth`), you lose
+  type safety for `components.*` calls
+
+- Your editor won’t autocomplete component function names
+
+- TypeScript won’t check component function arguments/returns
+
+- **Most apps don’t use components**, so this doesn’t affect them
 
 **Why This Happens:**
+
 - Components can be installed from npm as pre-built packages
+
 - The CLI would need to analyze the component graph (which components depend on which)
+
 - This requires executing component config files in the Convex runtime
-- Can't be done purely locally without the backend
+
+- Can’t be done purely locally without the backend
 
 ### 4.2 Early Schema Validation (Convex Runtime Rules)
 
 **Schema Validation Happens at Deploy Instead of Codegen:**
 
-The backend validates **Convex-specific runtime rules** that go beyond TypeScript's type system:
+The backend validates **Convex-specific runtime rules** that go beyond TypeScript’s type
+system:
 
 **Examples of Runtime Validation:**
 ```typescript
@@ -231,14 +283,23 @@ defineTable({
 ```
 
 **What This Means:**
-- **TypeScript still validates your schema types** (field types, required vs optional, etc.)
-- **Convex runtime rules** (valid index names, table names, configurations) are checked at deploy time
-- You'll catch these errors when you run `npx convex deploy` instead of at codegen time
-- **This is NOT a type safety issue** - it's a timing issue for validation
+
+- **TypeScript still validates your schema types** (field types, required vs optional,
+  etc.)
+
+- **Convex runtime rules** (valid index names, table names, configurations) are checked
+  at deploy time
+
+- You’ll catch these errors when you run `npx convex deploy` instead of at codegen time
+
+- **This is NOT a type safety issue** - it’s a timing issue for validation
 
 **Why This Happens:**
-- Convex has runtime constraints beyond TypeScript's type system
+
+- Convex has runtime constraints beyond TypeScript’s type system
+
 - The backend executes your schema in a V8 isolate to validate these rules
+
 - Executing user code locally in a V8 isolate would be a security/complexity issue
 
 ### 4.3 Potentially More Verbose Error Messages
@@ -258,12 +319,16 @@ Type 'number' is not assignable to parameter of type
 ```
 
 **What This Means:**
+
 - Dynamic mode uses utility types like `DataModelFromSchemaDefinition<>`
+
 - Error messages can be longer and show intermediate types
+
 - **The errors are still correct and actionable**
+
 - Modern TypeScript (4.0+) has improved error messages for utility types
 
----
+* * *
 
 ## 5. Use Cases
 
@@ -272,9 +337,13 @@ Type 'number' is not assignable to parameter of type
 **Scenario:** A CI system needs to verify TypeScript types without deploying.
 
 **Current Problems:**
+
 - Requires `CONVEX_DEPLOY_KEY` for authentication
+
 - Requires network access to Convex backend
+
 - Makes deployment to verify types (wasteful)
+
 - Fails in airgapped environments
 
 **Desired Behavior:**
@@ -285,20 +354,30 @@ tsc --noEmit  # Verify types locally - FULL type safety!
 ```
 
 **Benefits:**
+
 - No secrets management for basic type checking
+
 - Faster CI runs (no network round-trip)
+
 - Works in airgapped/offline environments
+
 - Verifies committed `_generated/` matches source
+
 - **Same type safety as backend mode** (for non-component apps)
 
 ### 5.2 AI Agent Development Workflows
 
-**Scenario:** AI coding agents (like Claude Code) need to generate types frequently during development.
+**Scenario:** AI coding agents (like Claude Code) need to generate types frequently
+during development.
 
 **Current Problems:**
+
 - Each codegen requires backend connection
+
 - Agents working in sandboxed environments may lack network
+
 - Frequent type generation creates unnecessary backend load
+
 - Authentication adds complexity to agent workflows
 
 **Desired Behavior:**
@@ -308,10 +387,15 @@ npx convex codegen --offline
 ```
 
 **Benefits:**
+
 - Agents can work offline/sandboxed
+
 - No auth setup required
+
 - Faster iteration cycles
+
 - Reduced backend load
+
 - **Full type safety** for agent-assisted coding
 
 ### 5.3 Local Development on Planes/Trains
@@ -319,7 +403,9 @@ npx convex codegen --offline
 **Scenario:** Developer working offline without internet.
 
 **Current Problems:**
+
 - Cannot generate types without backend connection
+
 - Referenced in [Issue #73](https://github.com/get-convex/convex-js/issues/73)
 
 **Desired Behavior:**
@@ -328,7 +414,7 @@ npx convex codegen --offline
 npx convex codegen --offline
 ```
 
----
+* * *
 
 ## 6. Current Codegen Flows
 
@@ -353,10 +439,13 @@ graph TD
     N --> O[Generated Types with Analysis]
 ```
 
-**Why Backend Is Currently Used:**
-Even though dynamic mode (the default) doesn't strictly need backend analysis, the CLI still calls the backend to:
+**Why Backend Is Currently Used:** Even though dynamic mode (the default) doesn’t
+strictly need backend analysis, the CLI still calls the backend to:
+
 1. Validate Convex-specific schema rules early
+
 2. Validate component graph
+
 3. Catch configuration errors before deploy
 
 ### 6.2 System UDFs Flow (Local-Only, Hidden)
@@ -374,13 +463,18 @@ graph TD
 ```
 
 **Key Difference:**
+
 - **No backend communication**
+
 - **No `startPush` call**
+
 - Uses dynamic type generation only
+
 - Flag is **hidden** (not documented for users)
+
 - Located at: `src/cli/lib/components.ts:132-142`
 
----
+* * *
 
 ## 7. Backend Analysis Deep Dive
 
@@ -424,74 +518,115 @@ export const evaluatedComponentDefinition = looseObject({
 ### 7.3 What Backend Actually Does
 
 **Schema Analysis:**
+
 1. Executes `convex/schema.ts` in a V8 isolate
+
 2. Extracts `defineSchema({...})` result
+
 3. Serializes validators to JSON
+
 4. **Validates Convex-specific rules:**
+
    - Table names are valid
+
    - Index names are valid
+
    - Search/vector index configurations are valid
+
    - Validators use supported types
+
 5. Returns structured metadata
 
 **Function Analysis:**
+
 1. Bundles and executes functions in isolate
+
 2. Extracts all `query()`, `mutation()`, `action()` definitions
+
 3. Extracts argument/return validators
+
 4. Determines visibility (public vs internal)
+
 5. Returns structured function metadata
 
-**Key Insight:**
-The backend does **validation**, not **type inference**. The types already exist in your local code - the backend just validates they follow Convex rules.
+**Key Insight:** The backend does **validation**, not **type inference**. The types
+already exist in your local code - the backend just validates they follow Convex rules.
 
----
+* * *
 
 ## 8. Local CLI Analysis Capabilities
 
 ### 8.1 What CLI CAN Do Locally
 
 ✅ **File Scanning**
+
 - `entryPoints()` scans for all `.ts`/`.js` files in convex directory
+
 - **Location:** `src/bundler/index.ts:294-332`
 
 ✅ **Bundling**
+
 - esbuild bundles code with full TypeScript support
+
 - Resolves imports, handles node modules
+
 - **Location:** `src/bundler/index.ts:162-175`
 
 ✅ **TypeScript Type Inference**
+
 - TypeScript compiler can infer types from code
+
 - `ApiFromModules<>` utility type leverages this
+
 - `DataModelFromSchemaDefinition<>` extracts schema types
+
 - **Location:** `src/cli/codegen_templates/component_api.ts:358-392`
+
 - **Location:** `src/cli/codegen_templates/dataModel.ts:74-116`
 
 ✅ **Schema File Reading**
+
 - Can import and read `schema.ts` as a TypeScript module
+
 - TypeScript type system extracts all type information
+
 - **Location:** `src/cli/lib/codegen.ts:353`
 
 ### 8.2 What CLI CANNOT Do Locally
 
 ❌ **Convex Runtime Validation**
+
 - Cannot validate Convex-specific schema rules in V8 isolate
+
 - Cannot validate index names/configurations against runtime constraints
+
 - **Reason:** Requires Convex runtime environment with security sandboxing
 
 ❌ **Component Graph Analysis**
+
 - Cannot resolve component imports across boundaries
+
 - Cannot analyze component configs from installed npm packages
+
 - **Reason:** Requires executing component config files in Convex runtime
 
 ### 8.3 Why Dynamic Mode Works So Well
 
 Dynamic mode succeeds because:
-1. **TypeScript is powerful enough** - Utility types like `DataModelFromSchemaDefinition<>` can extract complete type information
-2. **Schema is TypeScript** - Your schema file is valid TypeScript, so the TS compiler can analyze it
-3. **Functions are TypeScript** - Function definitions are TypeScript, so types can be inferred
-4. **No runtime needed for types** - Type checking doesn't require executing code, just analyzing it
 
----
+1. **TypeScript is powerful enough** - Utility types like
+   `DataModelFromSchemaDefinition<>` can extract complete type information
+
+2. **Schema is TypeScript** - Your schema file is valid TypeScript, so the TS compiler
+   can analyze it
+
+3. **Functions are TypeScript** - Function definitions are TypeScript, so types can be
+   inferred
+
+4. **No runtime needed for types** - Type checking doesn’t require executing code, just
+   analyzing it
+
+* * *
 
 ## 9. Proposed Solution: `--offline` Flag
 
@@ -516,59 +651,98 @@ npx convex codegen --offline --init
 **When `--offline` is provided:**
 
 1. **Skip Backend Communication**
+
    - Do NOT call `startPush()`
+
    - Do NOT call `loadDeploymentCredentials()`
+
    - Do NOT require authentication
 
 2. **Force Dynamic Codegen**
+
    - Ignore `staticApi` config (treat as `false`)
+
    - Ignore `staticDataModel` config (treat as `false`)
+
    - Use dynamic API objects (imports local files)
+
    - Use dynamic data model (imports local schema)
 
 3. **Local-Only Operations**
+
    - ✅ Scan files with `entryPoints()`
+
    - ✅ Bundle locally with esbuild
+
    - ✅ Generate types from local TypeScript types
+
    - ✅ Typecheck with tsc (if `--typecheck`)
+
    - ✅ Write to `_generated/` directory
 
 4. **User Communication**
+
    - Show info message about offline mode
-   - Warn if `staticApi: true` or `staticDataModel: true` in config (ignored in offline mode)
+
+   - Warn if `staticApi: true` or `staticDataModel: true` in config (ignored in offline
+     mode)
+
    - Warn about component type safety limitation (if components detected)
+
    - Success message confirming types generated locally
 
 ### 9.3 Accurate Limitations & Trade-offs
 
 **What You Lose:**
+
 - ❌ Component type safety (if using components from npm)
+
   - `components.*` calls become `any`
-  - Most apps don't use components
+
+  - Most apps don’t use components
+
 - ⚠️ Early validation (Convex runtime rules checked at deploy instead of codegen)
+
   - Index name validation
+
   - Search/vector index configuration validation
+
   - Table name validation
+
   - Still caught when you deploy - just timing difference
+
 - ⚠️ Potentially more verbose TypeScript errors
+
   - Errors still correct, just longer
 
 **What You Keep:**
-- ✅ **100% identical type safety** for your app's functions and data (no components)
+
+- ✅ **100% identical type safety** for your app’s functions and data (no components)
+
 - ✅ Full TypeScript type inference from local files
+
 - ✅ Autocomplete for tables, functions, fields
+
 - ✅ Type-safe function calls with correct arguments/returns
+
 - ✅ Type-safe database queries
+
 - ✅ Fast local iteration
+
 - ✅ CI/CD compatibility
+
 - ✅ Works completely offline
 
 **Recommendation:**
-- Use `--offline` for CI/CD, agent workflows, and rapid local iteration
-- Use normal codegen (with backend) before final deploy to catch runtime validation errors early
-- If you don't use components, offline mode gives you identical type safety!
 
----
+- Use `--offline` for CI/CD, agent workflows, and rapid local iteration
+
+- Use normal codegen (with backend) before final deploy to catch runtime validation
+  errors early
+
+- If you don’t use components, offline mode gives you identical type safety!
+
+* * *
 
 ## 10. Implementation Options
 
@@ -601,7 +775,7 @@ npx convex codegen --offline --init
        logMessage(
          chalk.blue("ℹ️  Offline mode: Generating types from local files")
        );
-
+   
        if (projectConfig.codegen.staticApi || projectConfig.codegen.staticDataModel) {
          logMessage(
            chalk.yellow(
@@ -611,7 +785,7 @@ npx convex codegen --offline --init
          );
        }
      }
-
+   
      await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
        dryRun: options.dryRun,
        debug: options.debug,
@@ -631,24 +805,34 @@ npx convex codegen --offline --init
    ```
 
 **File Changes:**
+
 - `src/cli/codegen.ts` - Add flag definition (~5 lines)
+
 - `src/cli/lib/components.ts` - Add routing logic (~15 lines)
+
 - `src/cli/lib/codegen.ts` - Add type definition (~1 line)
+
 - Tests: `src/cli/lib/codegen.test.ts` (new tests)
 
 **Pros:**
+
 - ✅ Minimal code changes (~25 lines)
+
 - ✅ Reuses battle-tested code path
+
 - ✅ Low risk
+
 - ✅ Fast to implement
+
 - ✅ Full type safety for non-component apps
 
 **Cons:**
+
 - ⚠️ System UDFs path may not be fully maintained (but it works)
 
 **Estimated Effort:** 2-4 hours
 
----
+* * *
 
 ### Option B: New Offline Code Path
 
@@ -658,7 +842,7 @@ Not recommended - Option A is simpler and achieves the same result.
 
 **Estimated Effort:** 1-2 days
 
----
+* * *
 
 ### Option C: Auto-Detect No Auth
 
@@ -694,59 +878,79 @@ if (options.offline || options.systemUdfs) {
 ```
 
 **File Changes:**
+
 - `src/cli/lib/components.ts` - Add auto-detection logic
 
 **Pros:**
+
 - ✅ Zero user configuration
-- ✅ "Just works" in CI without flags
+
+- ✅ “Just works” in CI without flags
+
 - ✅ Backwards compatible
+
 - ✅ Full type safety automatically
 
 **Cons:**
-- ⚠️ Less explicit (users might not realize it's offline)
+
+- ⚠️ Less explicit (users might not realize it’s offline)
+
 - ⚠️ No way to force offline when auth IS available
 
 **Estimated Effort:** 4-6 hours
 
----
+* * *
 
 ### Option D: Hybrid (Auto-Detect + Flag) ⭐⭐ (BEST LONG-TERM)
 
 **Approach:** Combine Options A and C
 
 **Behavior:**
+
 - Auto-detect no-auth scenarios → Use offline codegen + show info message
+
 - `--offline` flag → Force offline codegen (even if auth available) + show info
+
 - Normal → Use backend codegen (existing behavior)
 
 **Decision Matrix:**
 
 | Auth Available | `--offline` Flag | Behavior |
-|----------------|------------------|----------|
+| --- | --- | --- |
 | ❌ No | Not set | Auto offline (info message) |
 | ❌ No | `--offline` | Offline (info: flag redundant) |
 | ✅ Yes | Not set | Backend codegen (existing) |
 | ✅ Yes | `--offline` | Force offline (info: skipping backend) |
 
 **File Changes:**
+
 - `src/cli/codegen.ts` - Add flag
+
 - `src/cli/lib/components.ts` - Add routing logic for both paths
+
 - Tests: Both auto-detect and explicit flag scenarios
 
 **Pros:**
-- ✅ Best UX: "just works" in CI
+
+- ✅ Best UX: “just works” in CI
+
 - ✅ Explicit control when needed
+
 - ✅ Clear messaging to users
+
 - ✅ Full type safety in all offline scenarios
+
 - ✅ Future-proof
 
 **Cons:**
+
 - ⚠️ Most complex to implement
+
 - ⚠️ More test scenarios
 
 **Estimated Effort:** 1 day
 
----
+* * *
 
 ## 11. Recommendation & Implementation Plan
 
@@ -755,14 +959,21 @@ if (options.offline || options.systemUdfs) {
 **Start with Option A, evolve to Option D**
 
 **Phase 1 (Immediate):** Option A - `--offline` flag
+
 - Quick win for CI/CD use cases
+
 - Low risk
+
 - Can ship in days
+
 - Full type safety for most apps
 
 **Phase 2 (Follow-up):** Add auto-detection from Option C
+
 - Improve UX
+
 - Better defaults
+
 - Ship in next release
 
 ### 11.2 Implementation Steps
@@ -1074,7 +1285,7 @@ if (options.offline || options.systemUdfs) {
 }
 ```
 
----
+* * *
 
 ## 12. Testing Strategy
 
@@ -1150,7 +1361,7 @@ npx tsc --noEmit
     npm run typecheck  # Should pass with full type safety
 ```
 
----
+* * *
 
 ## 13. Migration Guide
 
@@ -1201,12 +1412,16 @@ CONVEX_DEPLOY_KEY=$KEY npx convex codegen
 ### 13.4 Backwards Compatibility
 
 ✅ **No breaking changes**
+
 - Existing `npx convex codegen` works unchanged
+
 - New `--offline` flag is opt-in
+
 - Static configs still work in normal mode
+
 - Full type safety preserved in both modes (for non-component apps)
 
----
+* * *
 
 ## 14. Future Enhancements
 
@@ -1224,8 +1439,11 @@ if (options.offline) {
 ```
 
 **Challenges:**
+
 - Components may not ship with _generated types
+
 - Component versions may not match
+
 - Complex component graphs
 
 ### 14.2 Local Schema Validation
@@ -1242,7 +1460,9 @@ if (options.offline && options.validateSchema) {
 ```
 
 **Benefits:**
+
 - Catch validation errors at codegen time even in offline mode
+
 - No need for backend round-trip just for validation
 
 ### 14.3 Cached Analysis
@@ -1259,10 +1479,12 @@ if (options.offline && cacheExists && isFresh) {
 ```
 
 **Benefits:**
+
 - Best of both worlds: precise types + offline support
+
 - Stale cache could show warning
 
----
+* * *
 
 ## 15. Documentation Updates
 
@@ -1280,7 +1502,7 @@ Options:
                        Runtime validation occurs at deploy time.
 ```
 
-### 15.2 Docs Page: "Codegen in CI/CD"
+### 15.2 Docs Page: “Codegen in CI/CD”
 
 **Location:** `docs.convex.dev/production/ci-cd`
 
@@ -1296,14 +1518,22 @@ npx tsc --noEmit
 
 This generates types from your local code without connecting to Convex.
 
-**Type Safety:** Offline mode provides **identical type safety** to backend mode! Your tables, queries, mutations, and actions are fully typed through TypeScript's type inference.
+**Type Safety:** Offline mode provides **identical type safety** to backend mode!
+Your tables, queries, mutations, and actions are fully typed through TypeScript’s type
+inference.
 
 **Trade-offs:**
+
 - ✅ No CONVEX_DEPLOY_KEY needed
+
 - ✅ Works offline
+
 - ✅ Fast (no network)
+
 - ✅ Full type safety for functions and data
-- ⚠️ Components (if you use them) become 'any'
+
+- ⚠️ Components (if you use them) become ‘any’
+
 - ⚠️ Schema validation happens at deploy time
 
 **For full validation including Convex runtime rules:**
@@ -1313,7 +1543,7 @@ CONVEX_DEPLOY_KEY=${{ secrets.CONVEX_DEPLOY_KEY }} npx convex codegen
 
 ## How It Works
 
-Offline mode uses TypeScript's powerful type inference:
+Offline mode uses TypeScript’s powerful type inference:
 
 **Data Model:**
 ```typescript
@@ -1425,3 +1655,4 @@ The Convex team already built a fully functional offline codegen system (dynamic
 | startPush | `src/cli/lib/deploy2.ts` | 57-74 |
 | StartPushResponse | `src/cli/lib/deployApi/startPush.ts` | 36-49 |
 | Config parsing | `src/cli/lib/config.ts` | Various |
+```
