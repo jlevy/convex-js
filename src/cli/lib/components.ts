@@ -93,7 +93,65 @@ export async function runCodegen(
     });
   }
 
-  if (!options.systemUdfs) {
+  if (options.offline || options.systemUdfs) {
+    // Offline mode: generate types locally without backend
+    if (options.offline) {
+      logMessage(
+        chalkStderr.blue(
+          "ℹ️  Offline mode: Generating types from local files\n" +
+            "   Full type safety via TypeScript inference",
+        ),
+      );
+
+      // Warn if static codegen config is set
+      if (
+        projectConfig.codegen.staticApi ||
+        projectConfig.codegen.staticDataModel
+      ) {
+        logMessage(
+          chalkStderr.yellow(
+            "⚠️  Static codegen config ignored in offline mode\n" +
+              "   Using dynamic types (identical type safety for non-component apps)",
+          ),
+        );
+      }
+
+      // Check if project uses components and warn
+      const componentDir = isComponentDirectory(
+        ctx,
+        functionsDirectoryPath,
+        true,
+      );
+      if (
+        componentDir.kind === "ok" &&
+        componentDir.component.definitionPath &&
+        !componentDir.component.isRootWithoutConfig
+      ) {
+        logMessage(
+          chalkStderr.yellow(
+            "⚠️  Component type safety unavailable in offline mode\n" +
+              "   'components.*' calls will have 'any' type\n" +
+              "   Your app's functions and data remain fully typed",
+          ),
+        );
+      }
+    }
+
+    if (options.typecheck !== "disable") {
+      logMessage(chalkStderr.gray("Running TypeScript typecheck…"));
+    }
+
+    await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
+      dryRun: options.dryRun,
+      debug: options.debug,
+      generateCommonJSApi: options.commonjs,
+    });
+
+    if (options.offline) {
+      logFinishedStep("✓ Types generated successfully (offline mode)");
+    }
+  } else {
+    // Backend mode: use deployment for validation and codegen
     // Early exit for a better error message trying to use a preview key.
     if (deploymentSelection.kind === "preview") {
       return await ctx.crash({
@@ -129,16 +187,6 @@ export async function runCodegen(
         debugNodeApis: options.debugNodeApis,
       },
     );
-  } else {
-    if (options.typecheck !== "disable") {
-      logMessage(chalkStderr.gray("Running TypeScript typecheck…"));
-    }
-
-    await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
-      dryRun: options.dryRun,
-      debug: options.debug,
-      generateCommonJSApi: options.commonjs,
-    });
   }
 }
 
