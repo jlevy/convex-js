@@ -319,3 +319,105 @@ All core functionality implemented and tested:
 - Integration testing in CI/CD environment (Vercel, GitHub Actions)
 - User feedback iteration
 - Documentation updates (CLI help, web docs)
+
+---
+
+## Pull Request Description
+
+### Title
+
+```
+feat: add --offline flag to codegen command
+```
+
+### PR Description
+
+**Problem**
+
+The `npx convex codegen` command requires a backend connection and
+authentication, which causes failures in CI/CD pipelines (especially Vercel
+builds) and complicates AI agent development workflows. Developers need to
+manage `CONVEX_DEPLOY_KEY` secrets and network access just to generate
+TypeScript types from local files.
+
+This is particularly problematic because:
+
+- Convex's default "dynamic mode" already uses pure TypeScript type inference
+  from local files
+- The generated types provide identical type safety without backend validation
+- The backend connection is only needed for early validation, not type
+  generation itself
+
+**Solution**
+
+Add a new `--offline` flag to the `codegen` command that generates types purely
+from local files without requiring backend connection or authentication.
+
+**Changes**
+
+This PR implements Option A from the specification (reuse existing system UDFs
+path):
+
+1. **Command Definition** (`src/cli/codegen.ts`)
+   - Add `--offline` flag with comprehensive help text
+   - Pass flag through to `runCodegen()` as required boolean
+
+2. **Type Safety** (`src/cli/lib/codegen.ts`)
+   - Update `CodegenOptions.offline` to required boolean (not optional)
+   - Prevents bugs from undefined checks
+
+3. **Routing Logic** (`src/cli/lib/components.ts`)
+   - Check `options.offline || options.systemUdfs` to route to local-only path
+   - Display info message about offline mode and TypeScript inference
+   - Warn if static codegen config is set (will be ignored)
+   - Warn if components are detected (they'll have `any` type)
+   - Show success message after generation
+
+4. **Comprehensive Test Suite** (`src/cli/lib/offlineCodegen.test.ts` - NEW)
+   - 15 test cases covering type safety, routing, messaging, and integration
+   - Follows project patterns from `config.test.ts`
+   - Uses vitest framework with filesystem mocks
+
+5. **Documentation**
+   - Specification document explaining feature design and rationale
+   - Implementation tracking document with progress and decisions
+
+**Key Implementation Details**
+
+- Reuses existing `doCodegen()` function (same path as `--system-udfs`)
+- ~60 lines of code across 3 core files
+- Low complexity, minimal risk (battle-tested code path)
+- Fully backwards compatible (existing behavior unchanged)
+
+**Testing**
+
+- 15 unit tests with comprehensive coverage
+- Type safety verified at compile time
+- User messaging tested for all scenarios
+- Manual testing plan documented for real-world validation
+
+**Usage**
+
+```bash
+# Generate types without backend or auth
+npx convex codegen --offline
+
+# In CI/CD pipelines (no secrets needed!)
+- run: npx convex codegen --offline
+- run: npx tsc --noEmit  # Full type safety!
+```
+
+**Fixes**
+
+Fixes https://github.com/get-convex/convex-js/issues/81 Related to
+https://github.com/get-convex/convex-js/issues/73
+
+**Documentation**
+
+- Implementation spec: `docs/spec-offline-codegen.md`
+- Implementation tracking: `docs/impl-offline-codegen.md`
+
+**Contributor Agreement**
+
+By submitting this pull request, I confirm that you can use, modify, copy, and
+redistribute this contribution, under the terms of your choice.
