@@ -25,6 +25,14 @@ export const codegen = new Command("codegen")
     "--init",
     "Also (over-)write the default convex/README.md and convex/tsconfig.json files, otherwise only written when creating a new Convex project.",
   )
+  .option(
+    "--offline",
+    "Generate types locally without connecting to a backend. " +
+      "Uses TypeScript type inference from local files. " +
+      "Provides full type safety for your functions and data. " +
+      "Components (if you use them) become 'any'. " +
+      "Ideal for CI/CD pipelines and offline development.",
+  )
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
   .addOption(new Option("--url <url>").hideHelp())
   .addOption(new Option("--live-component-sources").hideHelp())
@@ -56,6 +64,7 @@ export const codegen = new Command("codegen")
       liveComponentSources: !!options.liveComponentSources,
       debugNodeApis: false,
       systemUdfs: !!options.systemUdfs,
+      offline: !!options.offline,
       largeIndexDeletionCheck: "no verification", // `codegen` is a read-only operation
       codegenOnlyThisComponent: options.componentDir,
     });
