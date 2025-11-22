@@ -377,6 +377,15 @@ export async function runCodegen(
           "⚠️  Static codegen config ignored in offline mode"
         ));
       }
+
+      // Warn about component typing based on `isComponentDirectory`
+      const componentDir = isComponentDirectory(ctx, functionsDirectoryPath, true);
+      if (componentDir.kind === "ok" && !componentDir.component.isRootWithoutConfig) {
+        logMessage(chalk.yellow(
+          "⚠️  Component calls become 'any' in offline mode. " +
+            "Use backend codegen if you need typed `components.*`."
+        ));
+      }
     }
 
     await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
@@ -384,6 +393,7 @@ export async function runCodegen(
       debug: options.debug,
       generateCommonJSApi: options.commonjs,
       offline: options.offline,
+      componentDirOverride: options.codegenOnlyThisComponent,
     });
 
     logFinishedStep("✓ Types generated successfully (offline mode)");
@@ -396,8 +406,12 @@ export async function runCodegen(
 ```
 
 **Key:** The offline code path is **only** executed when `options.offline` is true.
-The existing backend flow at the end of this function continues to work exactly as
-before for all other cases.
+When `--component-dir` is supplied we reuse the same logic that
+`startComponentsPushAndCodegen` uses: resolve the directory via
+`isComponentDirectory()`, crash if `convex.config.ts` is missing, and pass the resolved
+path down via `componentDirOverride`. The existing backend flow at the end of this
+function continues to work exactly as before for all other cases, so `--component-dir`
+behaves the same way regardless of backend or offline execution.
 
 ### 7.5 Step 4: Support Component Stubs in doCodegen
 
@@ -418,13 +432,15 @@ export async function doCodegen(
     generateCommonJSApi?: boolean;
     debug?: boolean;
     offline?: boolean;
+    componentDirOverride?: string;
   },
 ) {
   const { projectConfig } = await readProjectConfig(ctx);
-  const codegenDir = await prepareForCodegen(ctx, functionsDir, opts);
+  const targetDir = opts?.componentDirOverride ?? functionsDir;
+  const codegenDir = await prepareForCodegen(ctx, targetDir, opts);
 
   // Detect if this is a component-aware project
-  const componentDir = isComponentDirectory(ctx, functionsDir, true);
+  const componentDir = isComponentDirectory(ctx, targetDir, true);
   const isComponentProject = componentDir.kind === "ok" &&
                             !componentDir.component.isRootWithoutConfig;
 
@@ -435,7 +451,7 @@ export async function doCodegen(
 
     // Data Model
     const schemaFiles = await doDataModelCodegen(
-      ctx, tmpDir, functionsDir, codegenDir, useTypeScript, opts
+      ctx, tmpDir, targetDir, codegenDir, useTypeScript, opts
     );
     writtenFiles.push(...schemaFiles);
 
@@ -460,7 +476,7 @@ export async function doCodegen(
       apiFiles = await doComponentApiStub(ctx, tmpDir, codegenDir, useTypeScript, generateCommonJSApi, opts);
     } else {
       // Use legacy apiCodegen (default behavior preserved)
-      apiFiles = await doApiCodegen(ctx, tmpDir, functionsDir, codegenDir, useTypeScript, generateCommonJSApi, opts);
+      apiFiles = await doApiCodegen(ctx, tmpDir, targetDir, codegenDir, useTypeScript, generateCommonJSApi, opts);
     }
     writtenFiles.push(...apiFiles);
 
@@ -474,7 +490,7 @@ export async function doCodegen(
     }
 
     // Typecheck
-    await typeCheckFunctionsInMode(ctx, typeCheckMode, functionsDir);
+    await typeCheckFunctionsInMode(ctx, typeCheckMode, targetDir);
   });
 }
 
