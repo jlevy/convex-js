@@ -1,8 +1,16 @@
 # Convex CLI: Offline Codegen Enhancement Specification
 
 **Date:** 2025-11-21 **Status:** Proposal **Related Branch:**
-`claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA` **Related GitHub Issue:** [#73 -
-Offline development error](https://github.com/get-convex/convex-js/issues/73)
+`claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA`
+
+**Related GitHub Issues:**
+
+- [#81 - Unable to run codegen on Vercel without
+  CONVEX_DEPLOY_KEY](https://github.com/get-convex/convex-js/issues/81) (Open, primary
+  motivation)
+
+- [#73 - Offline development error](https://github.com/get-convex/convex-js/issues/73)
+  (Closed, partial fix)
 
 * * *
 
@@ -1608,39 +1616,186 @@ Your editor gets full autocomplete and type checking!
 
 ---
 
-## 18. Related Work
+## 18. Related Work & Existing Solutions
 
-- **Issue #73:** Offline development error when fetching backend releases
-- **`CONVEX_AGENT_MODE=anonymous`:** Non-interactive development mode
-- **Dynamic API:** Already uses `ApiFromModules<>` for type inference (default!)
-- **Dynamic Data Model:** Already uses `DataModelFromSchemaDefinition<>` (default!)
+### 18.1 GitHub Issue #81: Vercel Codegen Problem (PRIMARY MOTIVATION)
+
+**Issue:** [Unable to run codegen on Vercel without CONVEX_DEPLOY_KEY](https://github.com/get-convex/convex-js/issues/81)
+
+**Status:** Open
+
+**Problem Description:**
+User **Loskir** reported that `npx convex codegen` fails on Vercel during build without `CONVEX_DEPLOY_KEY` set, despite codegen being intended for local file generation only.
+
+**Root Cause:**
+The CLI performs deployment validation too early in the codegen process (lines 582-596 in `deploymentSelection.ts`). When it detects a build environment (Vercel/Netlify), it crashes if no deploy key is configured, even though codegen doesn't actually need to deploy anything.
+
+**Current Workaround:**
+- Set any valid `CONVEX_DEPLOY_KEY` in Vercel environment variables
+- Or commit `_generated/` files to avoid codegen in CI
+
+**Maintainer Response:**
+Acknowledged as reasonable but not currently prioritized. Would accept a pull request to improve the workflow.
+
+**How This Spec Addresses It:**
+The `--offline` flag solves this completely - codegen can run on Vercel without any deploy key.
+
+### 18.2 GitHub Issue #73: Offline Development Error
+
+**Issue:** [Offline development error](https://github.com/get-convex/convex-js/issues/73)
+
+**Status:** Closed (partial fix)
+
+**Problem Description:**
+User **nemesiscodex** reported that running `npx convex dev --local` while offline fails with DNS resolution errors trying to reach Sentry and version check services.
+
+**Resolution:**
+Maintainer **Tom Ballinger** pushed a fix that resolved the immediate error, but noted:
+- The fix only addressed one specific scenario
+- Three ideal behaviors were identified (new projects, projects with local binaries, projects with selected versions)
+- Only scenario 3 was fully fixed
+- Scenarios 1-2 warrant future separate issues
+
+**Workaround:**
+Users can opt out via: `npx convex disable-local-deployments`
+
+**How This Spec Addresses It:**
+The `--offline` flag for codegen is complementary - it handles the codegen use case specifically, while Issue #73 was about the dev server.
+
+### 18.3 Agent Mode (`CONVEX_AGENT_MODE=anonymous`)
+
+**Documentation:** [Agent Mode](https://docs.convex.dev/cli/agent-mode)
+
+**Status:** Beta
+
+**What It Is:**
+Agent Mode enables cloud-based coding agents (Jules, Devin, Codex, Cursor) to run Convex CLI commands without requiring logged-in credentials.
+
+**How It Works:**
+Setting `CONVEX_AGENT_MODE=anonymous` causes the CLI to:
+1. Skip interactive login prompts
+2. Automatically use anonymous development mode
+3. Create a local Convex backend on the agent's VM
+4. Isolate the agent's environment from the developer's setup
+
+**Implementation Details:**
+Located in `src/cli/configure.ts:260` and `src/cli/lib/localDeployment/anonymous.ts:265-277`:
+
+```typescript
+// Check for agent mode
+const forceAnonymous = process.env.CONVEX_AGENT_MODE === "anonymous";
+if (forceAnonymous) {
+  logWarning("CONVEX_AGENT_MODE=anonymous mode is in beta");
+  // Skip login prompts, use anonymous deployment
+}
+
+// In anonymous deployment creation:
+if (process.env.CONVEX_AGENT_MODE === "anonymous") {
+  const deploymentName = "anonymous-agent";
+  const uniqueName = await getUniqueName(ctx, deploymentName, existingNames);
+  return { kind: "new", deploymentName: uniqueName };
+}
+```
+
+**Why Agent Mode Doesn’t Solve the Codegen Problem:**
+
+1. **Still Requires Local Backend:**
+
+   - Agent mode creates a local Convex backend that runs on the VM
+
+   - Requires downloading and running the Convex backend binary
+
+   - Not suitable for CI/CD environments or quick codegen-only operations
+
+2. **Runtime Dependency:**
+
+   - The local backend must be running for codegen to work
+
+   - Adds overhead and complexity for simple type generation
+
+   - Can fail if backend download fails (network issues, disk space, etc.)
+
+3. **Not Pure Offline:**
+
+   - Still needs initial network access to download backend binary
+
+   - Stores state in `.convex-local-backend/` directory
+
+   - More heavyweight than necessary for just generating types
+
+4. **Different Use Case:**
+
+   - Agent mode is for **full development workflow** (dev server + codegen)
+
+   - Our `--offline` flag is for **codegen-only** use cases (CI/CD, quick type checks)
+
+**Comparison:**
+
+| Feature | Agent Mode | `--offline` Flag |
+| --- | --- | --- |
+| **Purpose** | Full dev workflow for agents | Codegen-only for CI/CD |
+| **Requires Backend** | ✅ Yes (local) | ❌ No |
+| **Network Needed** | ⚠️ Initial download | ❌ No |
+| **Use Case** | Interactive agent development | CI/CD type checking |
+| **Overhead** | High (full backend) | Low (just TS compiler) |
+| **Speed** | Slower (starts backend) | Fast (local only) |
+| **Type Safety** | Full (with backend) | Full (via TS inference) |
+
+**Complementary Solutions:**
+
+- Use **Agent Mode** for agents doing full development (writing functions, testing,
+  deploying)
+
+- Use **`--offline`** for CI/CD, quick type checks, and offline development
+
+### 18.4 Existing Dynamic Codegen System
+
+**Key Discovery:** The CLI already has a complete offline-capable codegen system as the
+default!
+
+- **Dynamic API:** Uses `ApiFromModules<>` for type inference (default!)
+
+- **Dynamic Data Model:** Uses `DataModelFromSchemaDefinition<>` (default!)
+
 - **Static codegen:** Opt-in via config, requires backend
 
----
+The problem is that even with dynamic defaults, the CLI still calls the backend for
+validation. Our `--offline` flag simply bypasses that backend call.
+
+* * *
 
 ## 19. Summary: What This Spec Changes About Our Understanding
 
 **Initial Understanding (Incorrect):**
+
 - Offline mode sacrifices type safety for convenience
-- Static mode is "better" for types
+
+- Static mode is “better” for types
+
 - Backend analysis is necessary for correct types
 
 **Corrected Understanding:**
+
 - **Offline mode provides identical type safety** (for non-component apps)
+
 - Dynamic mode (which works offline) is actually the **default**!
+
 - Backend analysis is for **validation**, not **type inference**
+
 - TypeScript is powerful enough to extract complete type information locally
+
 - The only real limitation is component type safety
 
-**Key Insight:**
-The Convex team already built a fully functional offline codegen system (dynamic mode)! It's the default, it works great, and provides full type safety. We just need to make it accessible when there's no backend connection.
+**Key Insight:** The Convex team already built a fully functional offline codegen system
+(dynamic mode)! It’s the default, it works great, and provides full type safety.
+We just need to make it accessible when there’s no backend connection.
 
----
+* * *
 
 ## 20. Appendix: Code Locations Reference
 
 | Feature | File | Lines |
-|---------|------|-------|
+| --- | --- | --- |
 | Codegen command | `src/cli/codegen.ts` | 5-62 |
 | runCodegen | `src/cli/lib/components.ts` | 78-143 |
 | doCodegen (local) | `src/cli/lib/codegen.ts` | 130-200 |
@@ -1655,4 +1810,5 @@ The Convex team already built a fully functional offline codegen system (dynamic
 | startPush | `src/cli/lib/deploy2.ts` | 57-74 |
 | StartPushResponse | `src/cli/lib/deployApi/startPush.ts` | 36-49 |
 | Config parsing | `src/cli/lib/config.ts` | Various |
+```
 ```
