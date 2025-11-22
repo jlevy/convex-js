@@ -55,7 +55,7 @@ export type CodegenOptions = {
   liveComponentSources: boolean;
   debugNodeApis: boolean;
   systemUdfs: boolean;
-  offline?: boolean;
+  offline: boolean;
   largeIndexDeletionCheck: LargeIndexDeletionCheck;
   codegenOnlyThisComponent?: string | undefined;
 };

@@ -195,3 +195,127 @@ Tracks: docs/impl-offline-codegen.md
 
 **Complexity:** Low (reuses existing code path) **Risk:** Very low
 (battle-tested system UDFs path)
+
+---
+
+## Testing
+
+### Step 7: Comprehensive Unit Tests ✅
+
+**File:** `src/cli/lib/offlineCodegen.test.ts` **Status:** ✅ Completed
+
+Created comprehensive test suite with 15 test cases covering:
+
+1. **Type Safety Tests:**
+   - `offline` parameter is required boolean (not optional)
+   - Type system enforces boolean value
+   - Flag passed correctly from command to implementation
+
+2. **Core Functionality Tests:**
+   - `doCodegen` generates files without backend
+   - Routing logic correctly identifies offline mode
+   - Backend mode correctly routes when offline: false
+
+3. **User Communication Tests:**
+   - Info message displayed in offline mode
+   - Static config warning shown when applicable
+   - No warning when static config not set
+   - Component warning shown when components detected
+   - No component warning for root-only projects
+   - Success message displayed after generation
+
+4. **Integration Tests:**
+   - File generation creates api, dataModel, server files
+   - Options correctly passed through command layers
+   - Boolean conversions work correctly (!!options.offline)
+
+**Test Coverage:**
+
+- Boolean type safety: 4 tests
+- Routing logic: 2 tests
+- User messaging: 6 tests
+- File generation: 1 test
+- Integration: 2 tests
+
+**Testing Approach:**
+
+- Follows project patterns from `src/cli/lib/config.test.ts`
+- Uses vitest framework
+- Mocks filesystem operations
+- Tests both positive and negative cases
+- Verifies compile-time type safety
+
+**Manual Testing Plan:** The following manual tests should be performed in a
+real Convex project:
+
+1. **Basic Offline Mode:**
+
+   ```bash
+   npx convex codegen --offline
+   # Verify: _generated/ folder created with types
+   # Verify: No backend connection attempted
+   # Verify: Info message displayed
+   ```
+
+2. **With Static Config:**
+
+   ```bash
+   # Set staticApi: true in convex.json
+   npx convex codegen --offline
+   # Verify: Warning about static config ignored
+   ```
+
+3. **With Components:**
+
+   ```bash
+   # Install @convex-dev/auth or similar
+   npx convex codegen --offline
+   # Verify: Warning about component types
+   ```
+
+4. **TypeScript Compilation:**
+
+   ```bash
+   npx convex codegen --offline
+   npx tsc --noEmit
+   # Verify: No type errors in generated files
+   ```
+
+5. **CI/CD Simulation:**
+   ```bash
+   unset CONVEX_DEPLOY_KEY
+   npx convex codegen --offline
+   # Verify: Works without authentication
+   ```
+
+---
+
+## Summary
+
+### Implementation Complete ✅
+
+All core functionality implemented and tested:
+
+- ✅ `--offline` flag added to command
+- ✅ `CodegenOptions.offline` changed to required boolean
+- ✅ Routing logic implemented in `runCodegen()`
+- ✅ Info/warning messages for user communication
+- ✅ Success message indicates offline mode
+- ✅ Comprehensive unit test suite (15 tests)
+- ✅ Implementation tracking document maintained
+
+### Files Modified (6 files):
+
+1. `src/cli/codegen.ts` - Command definition with --offline flag
+2. `src/cli/lib/codegen.ts` - Updated CodegenOptions type
+3. `src/cli/lib/components.ts` - Routing logic and messaging
+4. `src/cli/lib/offlineCodegen.test.ts` - **NEW** Comprehensive test suite
+5. `docs/spec-offline-codegen.md` - Specification document
+6. `docs/impl-offline-codegen.md` - This tracking document
+
+### Next Steps:
+
+- Manual testing in real Convex project
+- Integration testing in CI/CD environment (Vercel, GitHub Actions)
+- User feedback iteration
+- Documentation updates (CLI help, web docs)
