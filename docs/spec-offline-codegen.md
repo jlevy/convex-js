@@ -431,13 +431,14 @@ export async function doCodegen(
     dryRun?: boolean;
     generateCommonJSApi?: boolean;
     debug?: boolean;
-    offline?: boolean;
+    offline: boolean;
     componentDirOverride?: string;
   },
 ) {
   const { projectConfig } = await readProjectConfig(ctx);
   const targetDir = opts?.componentDirOverride ?? functionsDir;
   const codegenDir = await prepareForCodegen(ctx, targetDir, opts);
+  const offline = opts?.offline ?? false;
 
   // Detect if this is a component-aware project
   const componentDir = isComponentDirectory(ctx, targetDir, true);
@@ -457,12 +458,10 @@ export async function doCodegen(
 
     // Server Files
     let serverFiles;
-    if (opts?.offline && isComponentProject) {
+    if (offline && isComponentProject) {
       // Use componentServerTS which includes components export (offline mode only)
       serverFiles = await writeComponentServerFile(ctx, tmpDir, codegenDir, opts);
-      if (opts.offline) {
-        logMessage(chalk.yellow("⚠️  Component calls become 'any' in offline mode"));
-      }
+      logMessage(chalk.yellow("⚠️  Component calls become 'any' in offline mode"));
     } else {
       // Use legacy serverCodegen (default behavior preserved)
       serverFiles = await writeServerFiles(ctx, tmpDir, codegenDir, useTypeScript, opts);
@@ -471,7 +470,7 @@ export async function doCodegen(
 
     // API Files
     let apiFiles;
-    if (opts?.offline && isComponentProject) {
+    if (offline && isComponentProject) {
       // Use componentApiStubTS which includes components export (offline mode only)
       apiFiles = await doComponentApiStub(ctx, tmpDir, codegenDir, useTypeScript, generateCommonJSApi, opts);
     } else {
@@ -571,7 +570,7 @@ export type CodegenOptions = {
   liveComponentSources: boolean;
   debugNodeApis: boolean;
   systemUdfs: boolean;
-  offline?: boolean;
+  offline: boolean;
   largeIndexDeletionCheck: LargeIndexDeletionCheck;
   codegenOnlyThisComponent?: string | undefined;
 };
