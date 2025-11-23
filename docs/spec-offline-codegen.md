@@ -4,34 +4,36 @@
 
 **Related GitHub Issues:**
 
-- [#81 - Unable to run codegen on Vercel without CONVEX_DEPLOY_KEY](https://github.com/get-convex/convex-js/issues/81)
-  (Open, primary motivation)
+- [#81 - Unable to run codegen on Vercel without
+  CONVEX_DEPLOY_KEY](https://github.com/get-convex/convex-js/issues/81) (Open, primary
+  motivation)
 
 - [#73 - Offline development error](https://github.com/get-convex/convex-js/issues/73)
   (Closed, partial fix)
 
----
+* * *
 
 ## 1. Executive Summary
 
-**Problem:** `npx convex codegen` requires backend connection and
-authentication, making it unsuitable for CI/CD pipelines and AI agent workflows.
+**Problem:** `npx convex codegen` requires backend connection and authentication, making
+it unsuitable for CI/CD pipelines and AI agent workflows.
 
-**Solution:** Add `--offline` flag that generates types purely from local files
-without backend communication.
+**Solution:** Add `--offline` flag that generates types purely from local files without
+backend communication.
 
-**Key Finding:** **Offline mode provides identical type safety to backend mode**
-for standard applications. The CLI already uses dynamic type generation by
-default, which leverages TypeScript’s type inference from local files.
+**Key Finding:** **Offline mode provides identical type safety to backend mode** for
+standard applications.
+The CLI already uses dynamic type generation by default, which leverages TypeScript’s
+type inference from local files.
 
-**Impact:** Enables offline CI/CD type checking, simplifies agent workflows,
-removes network dependency for code generation.
+**Impact:** Enables offline CI/CD type checking, simplifies agent workflows, removes
+network dependency for code generation.
 
-**IMPORTANT:** This change is **fully backwards compatible**. All existing
-`npx convex codegen` behavior remains unchanged. The new `--offline` flag is
-purely additive and opt-in.
+**IMPORTANT:** This change is **fully backwards compatible**. All existing `npx convex
+codegen` behavior remains unchanged.
+The new `--offline` flag is purely additive and opt-in.
 
----
+* * *
 
 ## 2. Background
 
@@ -68,8 +70,7 @@ Codegen has two modes configured in `convex.json`:
 
 - **Works offline** - no backend needed for type safety
 
-- Example:
-  `export type DataModel = DataModelFromSchemaDefinition<typeof schema>`
+- Example: `export type DataModel = DataModelFromSchemaDefinition<typeof schema>`
 
 **Static Mode (Opt-in):**
 
@@ -79,10 +80,10 @@ Codegen has two modes configured in `convex.json`:
 
 - Example: `export type DataModel = { users: { document: { name: string } } }`
 
-**The problem:** Even in dynamic mode (default), the CLI still connects to
-backend for validation.
+**The problem:** Even in dynamic mode (default), the CLI still connects to backend for
+validation.
 
----
+* * *
 
 ## 3. Critical Discovery: Dynamic Mode Already Provides Full Type Safety
 
@@ -101,8 +102,8 @@ import schema from "../schema.js"; // ← Your local schema
 export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 ```
 
-TypeScript’s compiler extracts all table names, field types, and indexes from
-your schema!
+TypeScript’s compiler extracts all table names, field types, and indexes from your
+schema!
 
 #### API Functions (Offline-Compatible)
 
@@ -119,38 +120,35 @@ declare const fullApi: ApiFromModules<{
 }>;
 ```
 
-TypeScript infers function signatures, arguments, and return types from your
-code!
+TypeScript infers function signatures, arguments, and return types from your code!
 
 ### 3.2 Type Safety Comparison
 
-| Feature              | Static Mode (Backend) | Dynamic Mode (Offline) |
-| -------------------- | --------------------- | ---------------------- |
-| **Requires Backend** | ✅ Yes                | ❌ No                  |
-| **Table Types**      | ✅ Typed              | ✅ Typed (identical)   |
-| **Function Calls**   | ✅ Typed              | ✅ Typed (identical)   |
-| **Arguments**        | ✅ Typed              | ✅ Typed (identical)   |
-| **Return Types**     | ✅ Typed              | ✅ Typed (identical)   |
-| **Components**       | ✅ Typed              | ❌ `any`               |
-| **Error Messages**   | ✅ Direct             | ⚠️ Via utility types   |
-| **CI/CD Friendly**   | ⚠️ Needs key          | ✅ No auth needed      |
+| Feature | Static Mode (Backend) | Dynamic Mode (Offline) |
+| --- | --- | --- |
+| **Requires Backend** | ✅ Yes | ❌ No |
+| **Table Types** | ✅ Typed | ✅ Typed (identical) |
+| **Function Calls** | ✅ Typed | ✅ Typed (identical) |
+| **Arguments** | ✅ Typed | ✅ Typed (identical) |
+| **Return Types** | ✅ Typed | ✅ Typed (identical) |
+| **Components** | ✅ Typed | ❌ `any` |
+| **Error Messages** | ✅ Direct | ⚠️ Via utility types |
+| **CI/CD Friendly** | ⚠️ Needs key | ✅ No auth needed |
 
-**Bottom Line:** For apps without components, dynamic mode = static mode in type
-safety!
+**Bottom Line:** For apps without components, dynamic mode = static mode in type safety!
 
----
+* * *
 
 ## 4. What You Lose with Offline Mode
 
 ### 4.1 Component Type Safety (Advanced Feature)
 
-**Components** are npm-installed modular backends (e.g., `@convex-dev/auth`).
-Most apps don’t use them.
+**Components** are npm-installed modular backends (e.g., `@convex-dev/auth`). Most apps
+don’t use them.
 
 **Impact:** `components.*` calls become `any` instead of typed.
 
-**Why:** Component analysis requires executing npm package code in Convex
-runtime.
+**Why:** Component analysis requires executing npm package code in Convex runtime.
 
 **Workaround:** Use backend mode if you need component types.
 
@@ -166,8 +164,7 @@ runtime.
 
 **Impact:** These errors are caught at deploy instead of codegen.
 
-**Why:** Requires executing your schema in V8 isolate (security/complexity
-issue).
+**Why:** Requires executing your schema in V8 isolate (security/complexity issue).
 
 **This is NOT a type safety issue** - just timing of validation.
 
@@ -182,7 +179,7 @@ Type 'number' is not assignable to parameter of type
 
 Errors are still **correct and actionable**.
 
----
+* * *
 
 ## 5. Use Cases
 
@@ -224,7 +221,7 @@ Work on planes/trains without internet:
 npx convex codegen --offline
 ```
 
----
+* * *
 
 ## 6. Proposed Solution: `--offline` Flag
 
@@ -246,6 +243,7 @@ npx convex codegen --offline --dry-run
 When `--offline` is set:
 
 1. **Skip Backend**
+
    - No `startPush()` call
 
    - No authentication required
@@ -253,6 +251,7 @@ When `--offline` is set:
    - No network access
 
 2. **Force Dynamic Mode**
+
    - Ignore static config (treat as `false`)
 
    - Generate types that import local files
@@ -260,6 +259,7 @@ When `--offline` is set:
    - Use TypeScript inference
 
 3. **Local Operations**
+
    - Scan files with `entryPoints()`
 
    - Generate types from TypeScript
@@ -267,6 +267,7 @@ When `--offline` is set:
    - Typecheck with local `tsc`
 
 4. **User Communication**
+
    - Info message about offline mode
 
    - Warn if static config set (ignored)
@@ -295,7 +296,7 @@ When `--offline` is set:
 
 - ✅ Works offline
 
----
+* * *
 
 ## 7. Implementation Plan
 
@@ -422,14 +423,13 @@ export async function runCodegen(
 }
 ```
 
-**Key:** The offline code path is **only** executed when `options.offline` is
-true. When `--component-dir` is supplied we reuse the same logic that
+**Key:** The offline code path is **only** executed when `options.offline` is true.
+When `--component-dir` is supplied we reuse the same logic that
 `startComponentsPushAndCodegen` uses: resolve the directory via
-`isComponentDirectory()`, crash if `convex.config.ts` is missing, and pass the
-resolved path down via `componentDirOverride`. The existing backend flow at the
-end of this function continues to work exactly as before for all other cases, so
-`--component-dir` behaves the same way regardless of backend or offline
-execution.
+`isComponentDirectory()`, crash if `convex.config.ts` is missing, and pass the resolved
+path down via `componentDirOverride`. The existing backend flow at the end of this
+function continues to work exactly as before for all other cases, so `--component-dir`
+behaves the same way regardless of backend or offline execution.
 
 ### 7.5 Step 4: Support Component Stubs in doCodegen
 
@@ -438,8 +438,7 @@ execution.
 **Problem:** Current `doCodegen()` uses `serverCodegen()` which doesn’t include
 `components` export.
 
-**Solution:** Use existing `componentServerTS(true)` when offline mode is
-enabled.
+**Solution:** Use existing `componentServerTS(true)` when offline mode is enabled.
 
 ```typescript
 export async function doCodegen(
@@ -617,11 +616,9 @@ async function doComponentApiStub(
 
 1. Detect component projects using `isComponentDirectory()`
 
-2. Use `componentServerTS(true)` for component projects (includes `components`
-   export)
+2. Use `componentServerTS(true)` for component projects (includes `components` export)
 
-3. Use `componentApiStubTS()` for component projects (includes `components`
-   export)
+3. Use `componentApiStubTS()` for component projects (includes `components` export)
 
 4. Warn users that components become `any`
 
@@ -635,8 +632,7 @@ async function doComponentApiStub(
 - `componentApiStubTS()` already exists at
   [src/cli/codegen_templates/component_api.ts:65-77](src/cli/codegen_templates/component_api.ts#L65-77)
 
-- These templates already generate the correct stubs with
-  `components: AnyComponents`
+- These templates already generate the correct stubs with `components: AnyComponents`
 
 - No new template code needed!
 
@@ -794,11 +790,105 @@ describe("offline codegen", () => {
 
 - Bypass `getDeploymentSelection()` entirely for offline mode
 
----
+* * *
 
-## 8. Testing Strategy
+## 8. Installing and Testing the Fork
 
-### 8.1 Unit Tests
+Since this is a fork of the Convex CLI, you can install and test it without publishing
+to npm. Here are the recommended approaches:
+
+### 8.1 Install Directly from GitHub
+
+The simplest way to use this fork is to install it directly from GitHub in your
+project’s `package.json`:
+
+```json
+{
+  "dependencies": {
+    "convex": "levy/convex-js#claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA"
+  }
+}
+```
+
+Then run `npm install`. You can reference any branch, tag, or commit SHA.
+
+**Pros:**
+- Works like normal npm
+
+- Shareable with team
+
+- Easy to update by changing the branch/SHA
+
+**Cons:**
+- Need to commit changes to test
+
+### 8.2 Use npm link (For Active Development)
+
+If you’re actively modifying the Convex CLI code:
+
+```bash
+# In your convex-js fork directory:
+cd /Users/levy/wrk/github/convex-js
+npm install
+npm run build
+npm link
+
+# In your project directory:
+cd ~/my-project
+npm link convex
+```
+
+**Pros:**
+- Changes are reflected when you rebuild (no need to commit)
+
+- Fast iteration
+
+**Cons:**
+- Global state, can interfere with other projects
+
+- Need to rebuild after changes
+
+### 8.3 Direct Installation Command
+
+You can also install directly without modifying `package.json`:
+
+```bash
+cd ~/my-project
+npm install git+https://github.com/levy/convex-js.git#claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA
+```
+
+### 8.4 Testing the --offline Flag
+
+Once installed, test the offline codegen:
+
+```bash
+# In your project with Convex schema and functions:
+npx convex codegen --offline
+
+# Verify type checking works:
+npx tsc --noEmit
+
+# Test in CI (no auth needed):
+unset CONVEX_DEPLOY_KEY
+npx convex codegen --offline
+npm run typecheck
+```
+
+### 8.5 Updating Your Installation
+
+**For GitHub installation (8.1):** Update the branch/SHA in `package.json` and run `npm
+install`
+
+**For npm link (8.2):** Just rebuild in the convex-js directory: `npm run build`
+
+**For direct installation (8.3):** Re-run the install command with the updated
+branch/SHA
+
+* * *
+
+## 9. Testing Strategy
+
+### 9.1 Unit Tests
 
 - Generate types without auth
 
@@ -810,7 +900,7 @@ describe("offline codegen", () => {
 
 - Component stubs generated
 
-### 8.2 Integration Tests
+### 9.2 Integration Tests
 
 ```bash
 # Test in real project
@@ -822,7 +912,7 @@ npx convex codegen --offline
 npx tsc --noEmit
 ```
 
-### 8.3 CI Test
+### 9.3 CI Test
 
 ```yaml
 # No secrets, should work
@@ -830,11 +920,11 @@ npx tsc --noEmit
 - run: npm run typecheck
 ```
 
----
+* * *
 
-## 9. Documentation Updates
+## 10. Documentation Updates
 
-### 9.1 CLI Help
+### 10.1 CLI Help
 
 ```
 --offline    Generate types locally without backend connection.
@@ -844,7 +934,7 @@ npx tsc --noEmit
              Ideal for CI/CD pipelines.
 ```
 
-### 9.2 Docs: CI/CD Guide
+### 10.2 Docs: CI/CD Guide
 
 ```markdown
 ## Type Checking in CI
@@ -867,11 +957,11 @@ through TypeScript's type inference.
 - ⚠️ Schema validation at deploy time
 ```
 
----
+* * *
 
-## 10. Migration Guide
+## 11. Migration Guide
 
-### 10.1 For CI/CD Pipelines
+### 11.1 For CI/CD Pipelines
 
 **Before:**
 
@@ -889,9 +979,10 @@ steps:
   - run: npx convex codegen --offline
 ```
 
-**No secrets needed. Same type safety!**
+**No secrets needed.
+Same type safety!**
 
-### 10.2 For Agent Workflows
+### 11.2 For Agent Workflows
 
 **Before:**
 
@@ -906,7 +997,7 @@ npx convex codegen
 npx convex codegen --offline
 ```
 
-### 10.3 Backwards Compatibility
+### 11.3 Backwards Compatibility
 
 ✅ **No breaking changes - 100% backwards compatible**
 
@@ -914,8 +1005,7 @@ npx convex codegen --offline
 
 - All existing flags and options behave identically when `--offline` is not used
 
-- `--offline` is a new, opt-in flag that only affects behavior when explicitly
-  set
+- `--offline` is a new, opt-in flag that only affects behavior when explicitly set
 
 - Static configs continue to work in normal mode (when `--offline` is not set)
 
@@ -923,11 +1013,11 @@ npx convex codegen --offline
 
 - No changes to default behavior, API surface, or configuration
 
----
+* * *
 
-## 11. Future Enhancements
+## 12. Future Enhancements
 
-### 11.1 Auto-Detection
+### 12.1 Auto-Detection
 
 Automatically use offline mode when no auth available:
 
@@ -949,7 +1039,7 @@ if (!options.offline && deploymentSelection.kind === "anonymous") {
 
 - Explicit control with flag when needed
 
-### 11.2 Local Schema Validation
+### 12.2 Local Schema Validation
 
 Implement Convex-specific validation in CLI:
 
@@ -959,7 +1049,7 @@ Implement Convex-specific validation in CLI:
 
 - Catch errors at codegen time
 
-### 11.3 Component Types from npm
+### 12.3 Component Types from npm
 
 Import component types from installed packages:
 
@@ -969,20 +1059,20 @@ Import component types from installed packages:
 
 - Partial component type safety offline
 
----
+* * *
 
-## 12. Related Work
+## 13. Related Work
 
-### 12.1 GitHub Issue #81 (Primary Motivation)
+### 13.1 GitHub Issue #81 (Primary Motivation)
 
 **Problem:** Codegen fails on Vercel without `CONVEX_DEPLOY_KEY`
 
-**Root Cause:** CLI crashes in build environments when no deploy key set, even
-though codegen doesn’t need deployment.
+**Root Cause:** CLI crashes in build environments when no deploy key set, even though
+codegen doesn’t need deployment.
 
 **Solution:** `--offline` flag solves this completely.
 
-### 12.2 Agent Mode
+### 13.2 Agent Mode
 
 **`CONVEX_AGENT_MODE=anonymous`** creates local backend for agents.
 
@@ -998,7 +1088,7 @@ though codegen doesn’t need deployment.
 
 - Offline for CI/CD and quick type checks
 
-### 12.3 Dynamic Codegen (Already Exists!)
+### 13.3 Dynamic Codegen (Already Exists!)
 
 The CLI already has dynamic mode as the default:
 
@@ -1010,13 +1100,13 @@ The CLI already has dynamic mode as the default:
 
 **We just need to expose it without backend validation.**
 
----
+* * *
 
-## 13. Summary
+## 14. Summary
 
-**Key Insight:** Convex already has a fully functional offline codegen system
-(dynamic mode). It’s the default and provides full type safety. We just need to
-make it accessible when there’s no backend connection.
+**Key Insight:** Convex already has a fully functional offline codegen system (dynamic
+mode). It’s the default and provides full type safety.
+We just need to make it accessible when there’s no backend connection.
 
 **Implementation:**
 
@@ -1040,18 +1130,19 @@ make it accessible when there’s no backend connection.
 
 - ⚠️ Components become `any` (advanced feature)
 
-**No new templates. No complex logic. Just expose what already exists.**
+**No new templates. No complex logic.
+Just expose what already exists.**
 
----
+* * *
 
-## 14. Appendix: Code Locations
+## 15. Appendix: Code Locations
 
-| Feature                   | File                                                      | Function                 |
-| ------------------------- | --------------------------------------------------------- | ------------------------ |
-| Codegen command           | `src/cli/codegen.ts`                                      | `codegen` command        |
-| Run codegen               | `src/cli/lib/components.ts`                               | `runCodegen()`           |
-| Local codegen             | `src/cli/lib/codegen.ts`                                  | `doCodegen()`            |
-| Component server template | `src/cli/codegen_templates/component_server.ts`           | `componentServerTS()`    |
-| Component API template    | `src/cli/codegen_templates/component_api.ts`              | `componentApiStubTS()`   |
-| Dynamic data model        | `src/cli/codegen_templates/dataModel.ts`                  | `dynamicDataModelTS()`   |
-| Component detection       | `src/cli/lib/components/definition/directoryStructure.ts` | `isComponentDirectory()` |
+| Feature | File | Function |
+| --- | --- | --- |
+| Codegen command | `src/cli/codegen.ts` | `codegen` command |
+| Run codegen | `src/cli/lib/components.ts` | `runCodegen()` |
+| Local codegen | `src/cli/lib/codegen.ts` | `doCodegen()` |
+| Component server template | `src/cli/codegen_templates/component_server.ts` | `componentServerTS()` |
+| Component API template | `src/cli/codegen_templates/component_api.ts` | `componentApiStubTS()` |
+| Dynamic data model | `src/cli/codegen_templates/dataModel.ts` | `dynamicDataModelTS()` |
+| Component detection | `src/cli/lib/components/definition/directoryStructure.ts` | `isComponentDirectory()` |

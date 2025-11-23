@@ -97,10 +97,7 @@ export async function runCodegen(
     // Offline mode: generate types locally without backend
     if (options.offline) {
       logMessage(
-        chalkStderr.blue(
-          "ℹ️  Offline mode: Generating types from local files\n" +
-            "   Full type safety via TypeScript inference",
-        ),
+        "Offline mode: Generating types from local files without backend connection.",
       );
 
       // Warn if static codegen config is set
@@ -110,8 +107,7 @@ export async function runCodegen(
       ) {
         logMessage(
           chalkStderr.yellow(
-            "⚠️  Static codegen config ignored in offline mode\n" +
-              "   Using dynamic types (identical type safety for non-component apps)",
+            "Static codegen config ignored in offline mode.",
           ),
         );
       }
@@ -129,9 +125,7 @@ export async function runCodegen(
       ) {
         logMessage(
           chalkStderr.yellow(
-            "⚠️  Component type safety unavailable in offline mode\n" +
-              "   'components.*' calls will have 'any' type\n" +
-              "   Your app's functions and data remain fully typed",
+            "Component type safety unavailable in offline mode. Component calls will have 'any' type.",
           ),
         );
       }
@@ -148,7 +142,7 @@ export async function runCodegen(
     });
 
     if (options.offline) {
-      logFinishedStep("✓ Types generated successfully (offline mode)");
+      logFinishedStep("Types generated successfully (offline mode).");
     }
   } else {
     // Backend mode: use deployment for validation and codegen
