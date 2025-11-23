@@ -134,24 +134,59 @@ test("doCodegen generates files without backend in offline mode", async () => {
         writtenFiles.set(path, content);
       },
       listDir: (path: string) => {
-        if (path === "convex/") {
-          return ["schema.ts", "messages.ts", "_generated"];
-        }
-        if (path === "convex/_generated/") {
-          return Array.from(writtenFiles.keys()).map((p) =>
-            p.replace("convex/_generated/", ""),
-          );
-        }
-        return [];
+        const names = (() => {
+          if (path === "convex/") {
+            return ["schema.ts", "messages.ts", "_generated"];
+          }
+          if (path === "convex/_generated/") {
+            return Array.from(writtenFiles.keys()).map((p) =>
+              p.replace("convex/_generated/", ""),
+            );
+          }
+          return [];
+        })();
+        return names.map((name) => ({
+          name,
+          isFile: () => !name.endsWith("/") && !name.startsWith("_"),
+          isDirectory: () => name.endsWith("/") || name.startsWith("_"),
+          isBlockDevice: () => false,
+          isCharacterDevice: () => false,
+          isSymbolicLink: () => false,
+          isFIFO: () => false,
+          isSocket: () => false,
+          path: path,
+          parentPath: path,
+        })) as any;
       },
       mkdir: () => {},
       rm: () => {},
       stat: (path: string) => ({
         isDirectory: () => path.endsWith("/"),
         isFile: () => !path.endsWith("/"),
+        isBlockDevice: () => false,
+        isCharacterDevice: () => false,
+        isSymbolicLink: () => false,
+        isFIFO: () => false,
+        isSocket: () => false,
         size: 0,
         mtimeMs: Date.now(),
-      }),
+        dev: 0,
+        ino: 0,
+        mode: 0,
+        nlink: 0,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        blksize: 0,
+        blocks: 0,
+        atimeMs: Date.now(),
+        ctimeMs: Date.now(),
+        birthtimeMs: Date.now(),
+        atime: new Date(),
+        mtime: new Date(),
+        ctime: new Date(),
+        birthtime: new Date(),
+      }) as any,
     },
   };
 
@@ -181,12 +216,11 @@ test("offline mode shows info message", async () => {
   // The actual test would call runCodegen with offline: true
   // and verify the info message is displayed
   testLogMessage(
-    "ℹ️  Offline mode: Generating types from local files\n" +
-      "   Full type safety via TypeScript inference",
+    "Offline mode: Generating types from local files without backend connection.",
   );
 
   expect(messages.some((m) => m.includes("Offline mode"))).toBe(true);
-  expect(messages.some((m) => m.includes("Full type safety"))).toBe(true);
+  expect(messages.some((m) => m.includes("without backend connection"))).toBe(true);
 });
 
 test("offline mode warns about static config when set", () => {
@@ -205,14 +239,12 @@ test("offline mode warns about static config when set", () => {
     projectConfig.codegen.staticDataModel
   ) {
     messages.push(
-      "⚠️  Static codegen config ignored in offline mode\n" +
-        "   Using dynamic types (identical type safety for non-component apps)",
+      "Static codegen config ignored in offline mode.",
     );
   }
 
   expect(messages.length).toBe(1);
   expect(messages[0]).toContain("Static codegen config ignored");
-  expect(messages[0]).toContain("identical type safety");
 });
 
 test("offline mode does not warn about static config when not set", () => {
@@ -229,7 +261,7 @@ test("offline mode does not warn about static config when not set", () => {
     projectConfig.codegen.staticApi ||
     projectConfig.codegen.staticDataModel
   ) {
-    messages.push("⚠️  Static codegen config ignored in offline mode");
+    messages.push("Static codegen config ignored in offline mode.");
   }
 
   expect(messages.length).toBe(0);
@@ -294,18 +326,13 @@ test("offline mode with component warning shows correct message", () => {
     !componentDir.component.isRootWithoutConfig
   ) {
     messages.push(
-      "⚠️  Component type safety unavailable in offline mode\n" +
-        "   'components.*' calls will have 'any' type\n" +
-        "   Your app's functions and data remain fully typed",
+      "Component type safety unavailable in offline mode. Component calls will have 'any' type.",
     );
   }
 
   expect(messages.length).toBe(1);
   expect(messages[0]).toContain("Component type safety unavailable");
-  expect(messages[0]).toContain("'components.*' calls will have 'any' type");
-  expect(messages[0]).toContain(
-    "Your app's functions and data remain fully typed",
-  );
+  expect(messages[0]).toContain("Component calls will have 'any' type");
 });
 
 test("offline mode without components does not show component warning", () => {
@@ -325,7 +352,7 @@ test("offline mode without components does not show component warning", () => {
     componentDir.component.definitionPath &&
     !componentDir.component.isRootWithoutConfig
   ) {
-    messages.push("⚠️  Component type safety unavailable in offline mode");
+    messages.push("Component type safety unavailable in offline mode. Component calls will have 'any' type.");
   }
 
   expect(messages.length).toBe(0);
@@ -335,10 +362,9 @@ test("offline mode success message", () => {
   const messages: string[] = [];
 
   // Simulate success message after codegen
-  messages.push("✓ Types generated successfully (offline mode)");
+  messages.push("Types generated successfully (offline mode).");
 
   expect(messages.length).toBe(1);
-  expect(messages[0]).toContain("✓");
   expect(messages[0]).toContain("Types generated successfully");
   expect(messages[0]).toContain("(offline mode)");
 });
