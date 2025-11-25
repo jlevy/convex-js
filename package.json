@@ -179,8 +179,8 @@
     }
   },
   "bin": {
-    "convex": "bin/main-dev",
-    "convex-bundled": "bin/main.js"
+    "convex": "bin/main.js",
+    "convex-dev": "bin/main-dev"
   },
   "scripts": {
     "build": "python3 scripts/build.py 2>&1",
