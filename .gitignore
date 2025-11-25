@@ -1,5 +1,6 @@
 temp/
-dist
+# dist - Temporarily committing dist/ to enable global install from branch
+# dist
 node_modules
 
 # The convex npm package does not use a package-lock.json.
