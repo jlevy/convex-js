@@ -84,9 +84,7 @@ export function apiCodegen(
 
   if (!useTypeScript) {
     // Generate separate .js and .d.ts files
-    const componentsImport = includeComponentsStub
-      ? ", AnyComponents"
-      : "";
+    const componentsImport = includeComponentsStub ? ", AnyComponents" : "";
     const componentsExportDTS = includeComponentsStub
       ? "\nexport declare const components: AnyComponents;"
       : "";
@@ -145,9 +143,7 @@ export function apiCodegen(
     };
   } else {
     // Generate combined .ts file
-    const componentsImportTS = includeComponentsStub
-      ? ", AnyComponents"
-      : "";
+    const componentsImportTS = includeComponentsStub ? ", AnyComponents" : "";
     const componentsImportRuntimeTS = includeComponentsStub
       ? ", componentsGeneric"
       : "";

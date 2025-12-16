@@ -1,12 +1,10 @@
 import { vi, test, expect, beforeEach, MockInstance, beforeAll } from "vitest";
 import { Context, oneoffContext } from "../../bundler/context.js";
 import { logFailure, logMessage } from "../../bundler/log.js";
-import { stripVTControlCharacters } from "util";
 
-let ctx: Context;
+let _ctx: Context;
 let stderrSpy: MockInstance;
 let stdoutSpy: MockInstance;
-let loggedMessages: string[];
 
 beforeAll(() => {
   stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -20,9 +18,7 @@ beforeEach(async () => {
     envFile: undefined,
   });
 
-  loggedMessages = [];
-
-  ctx = {
+  _ctx = {
     ...originalContext,
     crash: (args: { printedMessage: string | null }) => {
       if (args.printedMessage !== null) {
@@ -72,7 +68,6 @@ test("offline mode shows info message", async () => {
   };
 
   // Mock logMessage to capture output
-  const originalLogMessage = logMessage;
   vi.spyOn({ logMessage }, "logMessage").mockImplementation(testLogMessage);
 
   // The actual test would call runCodegen with offline: true
@@ -82,7 +77,9 @@ test("offline mode shows info message", async () => {
   );
 
   expect(messages.some((m) => m.includes("Offline mode"))).toBe(true);
-  expect(messages.some((m) => m.includes("without backend connection"))).toBe(true);
+  expect(messages.some((m) => m.includes("without backend connection"))).toBe(
+    true,
+  );
 });
 
 test("offline mode warns about static config when set", () => {
@@ -100,9 +97,7 @@ test("offline mode warns about static config when set", () => {
     projectConfig.codegen.staticApi ||
     projectConfig.codegen.staticDataModel
   ) {
-    messages.push(
-      "Static codegen config ignored in offline mode.",
-    );
+    messages.push("Static codegen config ignored in offline mode.");
   }
 
   expect(messages.length).toBe(1);
@@ -214,7 +209,9 @@ test("offline mode without components does not show component warning", () => {
     componentDir.component.definitionPath &&
     !componentDir.component.isRootWithoutConfig
   ) {
-    messages.push("Component type safety unavailable in offline mode. Component calls will have 'any' type.");
+    messages.push(
+      "Component type safety unavailable in offline mode. Component calls will have 'any' type.",
+    );
   }
 
   expect(messages.length).toBe(0);

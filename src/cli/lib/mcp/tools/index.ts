@@ -1,4 +1,3 @@
-import { ToolSchema } from "@modelcontextprotocol/sdk/types";
 import { Tool } from "@modelcontextprotocol/sdk/types";
 import { RequestContext } from "../requestContext.js";
 import { ZodTypeAny, z } from "zod";

@@ -113,7 +113,12 @@ export async function doCodegen(
   ctx: Context,
   functionsDir: string,
   typeCheckMode: TypeCheckMode,
-  opts?: { dryRun?: boolean; generateCommonJSApi?: boolean; debug?: boolean; offline?: boolean },
+  opts?: {
+    dryRun?: boolean;
+    generateCommonJSApi?: boolean;
+    debug?: boolean;
+    offline?: boolean;
+  },
 ) {
   const { projectConfig } = await readProjectConfig(ctx);
   const codegenDir = await prepareForCodegen(ctx, functionsDir, opts);

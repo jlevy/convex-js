@@ -106,9 +106,7 @@ export async function runCodegen(
         projectConfig.codegen.staticDataModel
       ) {
         logMessage(
-          chalkStderr.yellow(
-            "Static codegen config ignored in offline mode.",
-          ),
+          chalkStderr.yellow("Static codegen config ignored in offline mode."),
         );
       }
 
