@@ -89,9 +89,15 @@ function moduleIdentifier(modulePath) {
 }
 function apiCodegen(modulePaths, opts) {
   const useTypeScript = opts?.useTypeScript ?? false;
+  const includeComponentsStub = opts?.includeComponentsStub ?? false;
   if (!useTypeScript) {
+    const componentsImport = includeComponentsStub ? ", AnyComponents" : "";
+    const componentsExportDTS = includeComponentsStub ? "\nexport declare const components: AnyComponents;" : "";
+    const componentsExportJS = includeComponentsStub ? `
+import { componentsGeneric } from "convex/server";
+export const components = componentsGeneric();` : "";
     const apiDTS = `${(0, import_common.header)("Generated `api` utility.")}
-  import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
+  import type { ApiFromModules, FilterApi, FunctionReference${componentsImport} } from "convex/server";
   ${modulePaths.map(
       (modulePath) => `import type * as ${moduleIdentifier(modulePath)} from "../${importPath(
         modulePath
@@ -112,7 +118,7 @@ function apiCodegen(modulePaths, opts) {
     ).join("\n")}
   }>;
   export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
-  export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;
+  export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;${componentsExportDTS}
   `;
     const apiJS = `${(0, import_common.header)("Generated `api` utility.")}
   import { anyApi } from "convex/server";
@@ -126,16 +132,21 @@ function apiCodegen(modulePaths, opts) {
    * \`\`\`
    */
   export const api = anyApi;
-  export const internal = anyApi;
+  export const internal = anyApi;${componentsExportJS}
   `;
     return {
       DTS: apiDTS,
       JS: apiJS
     };
   } else {
+    const componentsImportTS = includeComponentsStub ? ", AnyComponents" : "";
+    const componentsImportRuntimeTS = includeComponentsStub ? ", componentsGeneric" : "";
+    const componentsExportTS = includeComponentsStub ? `
+
+export const components: AnyComponents = componentsGeneric();` : "";
     const apiTS = `${(0, import_common.header)("Generated `api` utility.")}
-import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
-import { anyApi } from "convex/server";
+import type { ApiFromModules, FilterApi, FunctionReference${componentsImportTS} } from "convex/server";
+import { anyApi${componentsImportRuntimeTS} } from "convex/server";
 ${modulePaths.map(
       (modulePath) => `import type * as ${moduleIdentifier(modulePath)} from "../${importPath(
         modulePath
@@ -166,7 +177,7 @@ export const api: FilterApi<typeof fullApi, FunctionReference<any, "public">> = 
  * const myFunctionReference = internal.myModule.myFunction;
  * \`\`\`
  */
-export const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">> = anyApi as any;
+export const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">> = anyApi as any;${componentsExportTS}
 `;
     return {
       TS: apiTS

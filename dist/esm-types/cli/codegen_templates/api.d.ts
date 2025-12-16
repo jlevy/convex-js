@@ -2,6 +2,7 @@ export declare function importPath(modulePath: string): string;
 export declare function moduleIdentifier(modulePath: string): string;
 export declare function apiCodegen(modulePaths: string[], opts?: {
     useTypeScript?: boolean;
+    includeComponentsStub?: boolean;
 }): {
     DTS: string;
     JS: string;

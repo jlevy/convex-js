@@ -87,7 +87,8 @@ export async function runCodegen(ctx, deploymentSelection, options) {
     await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
       dryRun: options.dryRun,
       debug: options.debug,
-      generateCommonJSApi: options.commonjs
+      generateCommonJSApi: options.commonjs,
+      offline: options.offline
     });
     if (options.offline) {
       logFinishedStep("Types generated successfully (offline mode).");

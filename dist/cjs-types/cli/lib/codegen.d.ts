@@ -28,6 +28,7 @@ export declare function doCodegen(ctx: Context, functionsDir: string, typeCheckM
     dryRun?: boolean;
     generateCommonJSApi?: boolean;
     debug?: boolean;
+    offline?: boolean;
 }): Promise<void>;
 export declare function doInitialComponentCodegen(ctx: Context, tmpDir: TempDir, componentDirectory: ComponentDirectory, opts?: {
     dryRun?: boolean;

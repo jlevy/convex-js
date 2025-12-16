@@ -139,6 +139,7 @@ export async function runCodegen(
       dryRun: options.dryRun,
       debug: options.debug,
       generateCommonJSApi: options.commonjs,
+      offline: options.offline,
     });
 
     if (options.offline) {

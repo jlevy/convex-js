@@ -113,7 +113,7 @@ export async function doCodegen(
   ctx: Context,
   functionsDir: string,
   typeCheckMode: TypeCheckMode,
-  opts?: { dryRun?: boolean; generateCommonJSApi?: boolean; debug?: boolean },
+  opts?: { dryRun?: boolean; generateCommonJSApi?: boolean; debug?: boolean; offline?: boolean },
 ) {
   const { projectConfig } = await readProjectConfig(ctx);
   const codegenDir = await prepareForCodegen(ctx, functionsDir, opts);
@@ -160,7 +160,7 @@ export async function doCodegen(
       codegenDir,
       useTypeScript,
       generateCommonJSApi,
-      opts,
+      { ...opts, includeComponentsStub: opts?.offline ?? false },
     );
     writtenFiles.push(...apiFiles);
 
@@ -775,7 +775,7 @@ async function doApiCodegen(
   codegenDir: string,
   useTypeScript: boolean,
   generateCommonJSApi: boolean,
-  opts?: { dryRun?: boolean; debug?: boolean },
+  opts?: { dryRun?: boolean; debug?: boolean; includeComponentsStub?: boolean },
 ) {
   const absModulePaths = await entryPoints(ctx, functionsDir);
   const modulePaths = absModulePaths
@@ -785,7 +785,10 @@ async function doApiCodegen(
   const writtenFiles: string[] = [];
 
   if (!useTypeScript) {
-    const apiContent = apiCodegen(modulePaths, { useTypeScript: false });
+    const apiContent = apiCodegen(modulePaths, {
+      useTypeScript: false,
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+    });
     await writeFormattedFile(
       ctx,
       tmpDir,
@@ -825,7 +828,10 @@ async function doApiCodegen(
       writtenFiles.push("api_cjs.cjs", "api_cjs.d.cts");
     }
   } else {
-    const apiContent = apiCodegen(modulePaths, { useTypeScript: true });
+    const apiContent = apiCodegen(modulePaths, {
+      useTypeScript: true,
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+    });
     await writeFormattedFile(
       ctx,
       tmpDir,
