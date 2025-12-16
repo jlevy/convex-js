@@ -322,6 +322,97 @@ All core functionality implemented and tested:
 
 ---
 
+## Step 8: Components Stub Implementation ✅
+
+**Date:** 2025-12-16
+**Commit:** 90d054b
+
+### Problem
+
+Projects using Convex components (e.g., `@convex-dev/rate-limiter`, `@convex-dev/action-cache`)
+failed to compile in offline mode because the `components` export was missing from the generated
+`api.d.ts` file.
+
+### Solution
+
+Added `includeComponentsStub` option to the `apiCodegen()` template function. When offline mode
+is enabled, this generates a stub `components` export using the `AnyComponents` type.
+
+### Implementation Details
+
+**File: `src/cli/codegen_templates/api.ts`**
+
+```typescript
+export function apiCodegen(
+  modulePaths: string[],
+  opts?: { useTypeScript?: boolean; includeComponentsStub?: boolean },
+) {
+  const includeComponentsStub = opts?.includeComponentsStub ?? false;
+
+  // For .d.ts files:
+  const componentsImport = includeComponentsStub ? ", AnyComponents" : "";
+  const componentsExportDTS = includeComponentsStub
+    ? "\nexport declare const components: AnyComponents;"
+    : "";
+
+  // For .js files:
+  const componentsExportJS = includeComponentsStub
+    ? `\nimport { componentsGeneric } from "convex/server";\nexport const components = componentsGeneric();`
+    : "";
+
+  // For .ts files:
+  const componentsImportTS = includeComponentsStub ? ", AnyComponents" : "";
+  const componentsImportRuntimeTS = includeComponentsStub ? ", componentsGeneric" : "";
+  const componentsExportTS = includeComponentsStub
+    ? `\n\nexport const components: AnyComponents = componentsGeneric();`
+    : "";
+}
+```
+
+**File: `src/cli/lib/codegen.ts`**
+
+Pass the `includeComponentsStub` option from `doCodegen()` to `doApiCodegen()`:
+
+```typescript
+const apiFiles = await doApiCodegen(
+  ctx,
+  tmpDir,
+  functionsDir,
+  codegenDir,
+  useTypeScript,
+  generateCommonJSApi,
+  { ...opts, includeComponentsStub: opts?.offline ?? false }
+);
+```
+
+### Generated Output
+
+**api.d.ts (offline mode):**
+```typescript
+import type { ApiFromModules, FilterApi, FunctionReference, AnyComponents } from "convex/server";
+// ... module imports and fullApi declaration ...
+export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
+export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;
+export declare const components: AnyComponents;
+```
+
+**api.js (offline mode):**
+```typescript
+import { anyApi, componentsGeneric } from "convex/server";
+export const api = anyApi;
+export const internal = anyApi;
+export const components = componentsGeneric();
+```
+
+### Testing
+
+Verified in ai-trade-arena project:
+- TypeScript compilation passes with stub types
+- Projects using `@convex-dev/rate-limiter` and `@convex-dev/action-cache` work correctly
+- No breaking changes to non-component projects
+
+---
+
 ## Pull Request Description
 
 ### Title

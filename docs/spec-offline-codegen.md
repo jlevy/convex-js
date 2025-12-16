@@ -143,14 +143,32 @@ TypeScript infers function signatures, arguments, and return types from your cod
 
 ### 4.1 Component Type Safety (Advanced Feature)
 
-**Components** are npm-installed modular backends (e.g., `@convex-dev/auth`). Most apps
-don’t use them.
+**Components** are npm-installed modular backends (e.g., `@convex-dev/auth`, `@convex-dev/rate-limiter`).
 
-**Impact:** `components.*` calls become `any` instead of typed.
+**Impact:** In offline mode, `components.*` calls have type `AnyComponents` instead of
+fully typed interfaces.
 
-**Why:** Component analysis requires executing npm package code in Convex runtime.
+**Why:** Full component type analysis requires executing npm package code in Convex
+runtime to introspect the component's API surface.
 
-**Workaround:** Use backend mode if you need component types.
+**How It Works:** Offline mode generates a `components` stub export:
+```typescript
+// api.d.ts (offline mode)
+import type { AnyComponents } from "convex/server";
+export declare const components: AnyComponents;
+
+// api.js (offline mode)
+import { componentsGeneric } from "convex/server";
+export const components = componentsGeneric();
+```
+
+This ensures that:
+- Projects using components still compile in offline mode
+- Imports of `components` from `_generated/api` don't break
+- Runtime behavior is preserved (component calls work, just without compile-time type checking)
+
+**Workaround:** Run `npx convex codegen` (without `--offline`) if you need full component
+type safety. The full types will be generated and committed to your repository.
 
 ### 4.2 Early Schema Validation
 
