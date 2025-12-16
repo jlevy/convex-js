@@ -1,8 +1,8 @@
 # Offline Codegen Implementation Log
 
 **Date Started:** 2025-11-22 **Branch:**
-`claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA` **Implementing:** Option
-A - Reuse Existing System UDFs Path
+`claude/convex-cli-no-auth-01YTaA2iiZgRHX9JVh4SH3qA` **Implementing:** Offline
+codegen with component type preservation (no downgrades)
 
 ---
 
@@ -41,20 +41,19 @@ This involves:
 - Consistent with other tools (npm, git)
 - Documents already use "offline" terminology
 
-### Decision 2: Reuse System UDFs Path vs New Path
+### Decision 2: Component Preservation
 
-**Chosen:** Reuse existing `--system-udfs` path **Rationale:**
+**Chosen:** Never downgrade component types in offline mode.
 
-- Minimal code changes (~25 lines vs 1-2 days)
-- Battle-tested code path
-- Low risk
-- Identical functionality
+- Read existing `_generated/api.ts` **or** `_generated/api.d.ts` (whichever exists).
+- Extract the `components` declaration via TS AST.
+- Emit `AnyComponents` only when no prior component types exist.
+- If a stub is emitted but preserved types exist, re-inject them post-generation.
 
 ### Decision 3: Component Detection
 
-**Chosen:** Check if project uses components and warn appropriately **How:** Use
-existing `isComponentDirectory()` check **Implementation:** Show warning only if
-components are actually used
+**Chosen:** Warn when components are present, but still preserve previously generated
+types so offline runs remain idempotent.
 
 ### Decision 4: Messaging Strategy
 
@@ -122,7 +121,15 @@ Implemented the core offline mode logic:
 - Messages use chalk colors: blue for info, yellow for warnings
 - Success message explicitly indicates "(offline mode)"
 
-### Step 5: Manual Testing ⏳
+### Step 5: Component Preservation Enhancements ✅
+
+- Handle both `_generated/api.ts` and `_generated/api.d.ts` when locating preserved
+  component types.
+- Preserve and re-inject component types when present; only stub when none exist.
+- Offline runs are idempotent after an online run (no downgrades back to
+  `AnyComponents`).
+
+### Step 6: Manual Testing ⏳
 
 **Status:** ⏳ Pending
 
@@ -148,7 +155,7 @@ Implemented the core offline mode logic:
    - Invalid TypeScript in functions
    - Verify appropriate error messages
 
-### Step 6: Format and Commit ⏳
+### Step 7: Format and Commit ⏳
 
 **Status:** ⏳ Pending
 
@@ -322,21 +329,22 @@ All core functionality implemented and tested:
 
 ---
 
-## Step 8: Components Stub Implementation ✅
+## Step 8: Components Stub Implementation ✅ (updated)
 
 **Date:** 2025-12-16 **Commit:** 90d054b
 
 ### Problem
 
-Projects using Convex components (e.g., `@convex-dev/rate-limiter`,
-`@convex-dev/action-cache`) failed to compile in offline mode because the
-`components` export was missing from the generated `api.d.ts` file.
+Projects using Convex components risked losing component types if offline codegen ran
+after an online run, because the `components` export could be replaced by an
+`AnyComponents` stub.
 
 ### Solution
 
-Added `includeComponentsStub` option to the `apiCodegen()` template function.
-When offline mode is enabled, this generates a stub `components` export using
-the `AnyComponents` type.
+- Preserve component types from existing `_generated/api.(d.)ts` before offline run.
+- If offline generation produces an `AnyComponents` stub but preserved types exist,
+  re-inject them.
+- Emit `AnyComponents` only when no prior component types exist.
 
 ### Implementation Details
 

@@ -170,10 +170,14 @@ export async function doCodegen(
     let preservedComponentTypes: string | undefined;
     let warnedMissingComponentTypes = false;
     if (opts?.offline) {
-      const existingApiPath = useTypeScript
-        ? path.join(codegenDir, "api.ts")
-        : path.join(codegenDir, "api.d.ts");
-      if (ctx.fs.exists(existingApiPath)) {
+      const apiCandidates = [
+        path.join(codegenDir, "api.ts"),
+        path.join(codegenDir, "api.d.ts"),
+      ];
+      const existingApiPath = apiCandidates.find((candidate) =>
+        ctx.fs.exists(candidate),
+      );
+      if (existingApiPath) {
         try {
           const existingContent = ctx.fs.readUtf8File(existingApiPath);
           const componentTypes = extractComponentTypes(existingContent);

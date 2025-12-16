@@ -27,9 +27,9 @@ default, which leverages TypeScript’s type inference from local files.
 **Impact:** Enables offline CI/CD type checking, simplifies agent workflows,
 removes network dependency for code generation.
 
-**IMPORTANT:** This change is **fully backwards compatible**. All existing
-`npx convex codegen` behavior remains unchanged. The new `--offline` flag is
-purely additive and opt-in.
+**IMPORTANT:** Offline codegen must **never downgrade generated outputs**. If full
+component types were produced previously, offline runs preserve them and remain
+idempotent; a stub is only emitted when no prior component types exist.
 
 ---
 
@@ -147,50 +147,29 @@ safety!
 **Components** are npm-installed modular backends (e.g., `@convex-dev/auth`,
 `@convex-dev/rate-limiter`).
 
-**Impact:** In offline mode, `components.*` calls have type `AnyComponents`
-instead of fully typed interfaces.
+**Impact:** Offline mode must preserve previously generated component types. Only when
+no component types have ever been generated do we emit an `AnyComponents` stub.
 
-**Why:** Full component type analysis requires executing npm package code in
-Convex runtime to introspect the component's API surface.
-
-**How It Works:** Offline mode generates a `components` stub export:
-
-```typescript
-// api.d.ts (offline mode)
-import type { AnyComponents } from "convex/server";
-export declare const components: AnyComponents;
-
-// api.js (offline mode)
-import { componentsGeneric } from "convex/server";
-export const components = componentsGeneric();
-```
-
-This ensures that:
-
-- Projects using components still compile in offline mode
-- Imports of `components` from `_generated/api` don't break
-- Runtime behavior is preserved (component calls work, just without compile-time
-  type checking)
-
-**Workaround:** Run `npx convex codegen` (without `--offline`) if you need full
-component type safety. The full types will be generated and committed to your
-repository.
+**Why:** Full component type analysis requires executing npm package code in the
+Convex runtime. Offline cannot recompute component surfaces, so we reuse the last known
+types instead of downgrading to `AnyComponents`.
 
 ### 4.1.1 Component Type Preservation (Enhanced Offline Mode)
 
-**Problem:** The basic `AnyComponents` stub breaks type checking for projects
-that use Convex components like `@convex-dev/rate-limiter`.
+**Problem:** A naive `AnyComponents` stub breaks type checking for component users.
 
-**Solution:** Offline mode preserves existing component types from previously
-generated `api.d.ts` files, only regenerating the `api` and `internal` exports.
+**Solution:** Offline mode preserves existing component types from previously generated
+`api.(d.)ts` files, only regenerating the `api` and `internal` exports. Stub is used
+only when no prior component types exist.
 
 **How It Works:**
 
-1. Before regenerating, read existing `_generated/api.d.ts`
+1. Before regenerating, read existing `_generated/api.ts` **or** `_generated/api.d.ts`
 2. Use TypeScript Compiler API to extract
    `export declare const components: {...}`
 3. Generate new `api` and `internal` exports from local files
 4. Re-inject preserved component types instead of `AnyComponents` stub
+5. If no prior component types exist, emit the `AnyComponents` stub
 
 **Implementation (using TypeScript AST):**
 
@@ -232,10 +211,11 @@ export function extractComponentTypes(content: string): string | null {
 
 **Behavior:**
 
-- If existing `api.d.ts` has real component types → preserve them
-- If existing `api.d.ts` has `AnyComponents` → use `AnyComponents` (no change)
-- If no existing `api.d.ts` → use `AnyComponents` stub
+- If existing `api.(d.)ts` has real component types → preserve them
+- If existing `api.(d.)ts` has `AnyComponents` → keep stub
+- If no existing file → emit `AnyComponents` stub
 - Always regenerate `api` and `internal` exports from local files
+- Offline runs are idempotent and never downgrade previously generated components
 
 **Benefits:**
 
