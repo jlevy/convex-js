@@ -529,3 +529,248 @@ https://github.com/get-convex/convex-js/issues/73
 
 By submitting this pull request, I confirm that you can use, modify, copy, and
 redistribute this contribution, under the terms of your choice.
+
+---
+
+## Step 9: Component Type Preservation ⏳
+
+**Date:** 2025-12-16 **Status:** ⏳ In Progress
+
+### Problem
+
+The `AnyComponents` stub generated in offline mode breaks type checking for
+projects using Convex components like `@convex-dev/rate-limiter`. The
+`RateLimiter` constructor expects `ComponentApi<{...}>`, not
+`AnyComponentReference`.
+
+### Solution
+
+Preserve existing component types from previously generated `api.d.ts` files
+using TypeScript Compiler API for robust parsing.
+
+### Implementation Plan
+
+**File: `src/cli/lib/componentTypePreservation.ts` (NEW)**
+
+```typescript
+import ts from "typescript";
+
+/**
+ * Extracts the component type declaration from an existing api.d.ts file.
+ * Uses TypeScript Compiler API for robust parsing.
+ *
+ * @param content - The content of the existing api.d.ts file
+ * @returns The component declaration string, or null if not found/is AnyComponents
+ */
+export function extractComponentTypes(content: string): string | null {
+  const sourceFile = ts.createSourceFile(
+    "api.d.ts",
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isVariableStatement(statement) &&
+      statement.modifiers?.some(
+        (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+      ) &&
+      statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)
+    ) {
+      for (const decl of statement.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === "components") {
+          // Check if it's AnyComponents (we don't want to preserve that)
+          if (decl.type && ts.isTypeReferenceNode(decl.type)) {
+            const typeName = decl.type.typeName;
+            if (
+              ts.isIdentifier(typeName) &&
+              typeName.text === "AnyComponents"
+            ) {
+              return null; // Don't preserve AnyComponents stub
+            }
+          }
+
+          // Extract the full declaration
+          return printer.printNode(
+            ts.EmitHint.Unspecified,
+            statement,
+            sourceFile,
+          );
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks if the given component declaration is a real type (not AnyComponents).
+ */
+export function hasRealComponentTypes(componentDecl: string | null): boolean {
+  if (!componentDecl) return false;
+  // Real types have object type literals, not just AnyComponents reference
+  return (
+    componentDecl.includes("{") && !componentDecl.includes("AnyComponents")
+  );
+}
+```
+
+**File: `src/cli/codegen_templates/api.ts` - Updated**
+
+Add `preservedComponentTypes` option:
+
+```typescript
+export function apiCodegen(
+  modulePaths: string[],
+  opts?: {
+    useTypeScript?: boolean;
+    includeComponentsStub?: boolean;
+    preservedComponentTypes?: string; // NEW: preserved types to inject
+  },
+) {
+  const preservedComponentTypes = opts?.preservedComponentTypes;
+
+  // If we have preserved types, use them instead of stub
+  if (preservedComponentTypes) {
+    componentsExportDTS = `\n${preservedComponentTypes}`;
+    // For JS, still use componentsGeneric() for runtime
+    componentsExportJS = `\nimport { componentsGeneric } from "convex/server";\nexport const components = componentsGeneric();`;
+  }
+  // ... rest of generation
+}
+```
+
+**File: `src/cli/lib/codegen.ts` - Updated**
+
+Read existing api.d.ts and extract component types before regenerating:
+
+```typescript
+import {
+  extractComponentTypes,
+  hasRealComponentTypes,
+} from "./componentTypePreservation.js";
+
+// In doApiCodegen or doCodegen:
+if (opts?.offline) {
+  const existingApiPath = path.join(codegenDir, "api.d.ts");
+  if (ctx.fs.exists(existingApiPath)) {
+    const existingContent = ctx.fs.readUtf8File(existingApiPath);
+    const componentTypes = extractComponentTypes(existingContent);
+    if (hasRealComponentTypes(componentTypes)) {
+      opts.preservedComponentTypes = componentTypes;
+      logMessage(chalk.blue("ℹ️  Preserving existing component types"));
+    }
+  }
+}
+```
+
+### Test Cases
+
+**File: `src/cli/lib/componentTypePreservation.test.ts` (NEW)**
+
+```typescript
+import { describe, test, expect } from "vitest";
+import {
+  extractComponentTypes,
+  hasRealComponentTypes,
+} from "./componentTypePreservation.js";
+
+describe("extractComponentTypes", () => {
+  test("extracts real component types from api.d.ts", () => {
+    const content = `
+export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
+export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;
+export declare const components: {
+  rateLimiter: {
+    lib: {
+      checkRateLimit: FunctionReference<"query", "internal", { name: string }, boolean>;
+    };
+  };
+};
+`;
+    const result = extractComponentTypes(content);
+    expect(result).not.toBeNull();
+    expect(result).toContain("components");
+    expect(result).toContain("rateLimiter");
+  });
+
+  test("returns null for AnyComponents stub", () => {
+    const content = `
+export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
+export declare const components: AnyComponents;
+`;
+    const result = extractComponentTypes(content);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when no components export", () => {
+    const content = `
+export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
+export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;
+`;
+    const result = extractComponentTypes(content);
+    expect(result).toBeNull();
+  });
+
+  test("handles multi-line nested component types", () => {
+    const content = `
+export declare const components: {
+  rateLimiter: {
+    lib: {
+      checkRateLimit: FunctionReference<
+        "query",
+        "internal",
+        { config: { kind: "token bucket"; rate: number } },
+        { ok: true } | { ok: false; retryAfter: number }
+      >;
+    };
+  };
+  actionCache: {
+    lib: {
+      get: FunctionReference<"query", "internal", { name: string }, any>;
+    };
+  };
+};
+`;
+    const result = extractComponentTypes(content);
+    expect(result).not.toBeNull();
+    expect(result).toContain("rateLimiter");
+    expect(result).toContain("actionCache");
+  });
+});
+
+describe("hasRealComponentTypes", () => {
+  test("returns true for real component types", () => {
+    const decl = `export declare const components: { rateLimiter: { lib: {} } };`;
+    expect(hasRealComponentTypes(decl)).toBe(true);
+  });
+
+  test("returns false for null", () => {
+    expect(hasRealComponentTypes(null)).toBe(false);
+  });
+
+  test("returns false for AnyComponents", () => {
+    const decl = `export declare const components: AnyComponents;`;
+    expect(hasRealComponentTypes(decl)).toBe(false);
+  });
+});
+```
+
+### Files to Create/Modify
+
+1. `src/cli/lib/componentTypePreservation.ts` - **NEW** - Extraction logic
+2. `src/cli/lib/componentTypePreservation.test.ts` - **NEW** - Unit tests
+3. `src/cli/codegen_templates/api.ts` - Add `preservedComponentTypes` option
+4. `src/cli/lib/codegen.ts` - Read existing file and extract types
+
+### Expected Behavior
+
+| Scenario                                      | Result                                               |
+| --------------------------------------------- | ---------------------------------------------------- |
+| No existing api.d.ts                          | Generate with `AnyComponents` stub                   |
+| Existing with `AnyComponents`                 | Generate with `AnyComponents` stub (no change)       |
+| Existing with real types                      | Preserve real types, regenerate api/internal         |
+| Existing with real types, new functions added | Real types preserved + new functions in api/internal |

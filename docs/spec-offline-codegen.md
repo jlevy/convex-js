@@ -176,6 +176,74 @@ This ensures that:
 component type safety. The full types will be generated and committed to your
 repository.
 
+### 4.1.1 Component Type Preservation (Enhanced Offline Mode)
+
+**Problem:** The basic `AnyComponents` stub breaks type checking for projects
+that use Convex components like `@convex-dev/rate-limiter`.
+
+**Solution:** Offline mode preserves existing component types from previously
+generated `api.d.ts` files, only regenerating the `api` and `internal` exports.
+
+**How It Works:**
+
+1. Before regenerating, read existing `_generated/api.d.ts`
+2. Use TypeScript Compiler API to extract
+   `export declare const components: {...}`
+3. Generate new `api` and `internal` exports from local files
+4. Re-inject preserved component types instead of `AnyComponents` stub
+
+**Implementation (using TypeScript AST):**
+
+```typescript
+import ts from "typescript";
+
+export function extractComponentTypes(content: string): string | null {
+  const sourceFile = ts.createSourceFile(
+    "api.d.ts",
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+
+  const printer = ts.createPrinter();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isVariableStatement(statement) &&
+      statement.modifiers?.some(
+        (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+      ) &&
+      statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)
+    ) {
+      for (const decl of statement.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === "components") {
+          return printer.printNode(
+            ts.EmitHint.Unspecified,
+            statement,
+            sourceFile,
+          );
+        }
+      }
+    }
+  }
+  return null;
+}
+```
+
+**Behavior:**
+
+- If existing `api.d.ts` has real component types → preserve them
+- If existing `api.d.ts` has `AnyComponents` → use `AnyComponents` (no change)
+- If no existing `api.d.ts` → use `AnyComponents` stub
+- Always regenerate `api` and `internal` exports from local files
+
+**Benefits:**
+
+- Works with any component configuration
+- No need to understand component package internals
+- Users run `npx convex codegen` once (with backend) to get types
+- Then `--offline` preserves them while updating function types
+
 ### 4.2 Early Schema Validation
 
 **What:** Backend validates Convex-specific runtime rules:

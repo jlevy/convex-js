@@ -1,4 +1,5 @@
 import { header } from "./common.js";
+import { extractComponentTypeAnnotation } from "../lib/componentTypePreservation.js";
 
 export function importPath(modulePath: string) {
   // Replace backslashes with forward slashes.
@@ -77,20 +78,34 @@ export function moduleIdentifier(modulePath: string) {
 
 export function apiCodegen(
   modulePaths: string[],
-  opts?: { useTypeScript?: boolean; includeComponentsStub?: boolean },
+  opts?: {
+    useTypeScript?: boolean;
+    includeComponentsStub?: boolean;
+    preservedComponentTypes?: string;
+  },
 ) {
   const useTypeScript = opts?.useTypeScript ?? false;
   const includeComponentsStub = opts?.includeComponentsStub ?? false;
+  const preservedComponentTypes = opts?.preservedComponentTypes;
 
   if (!useTypeScript) {
     // Generate separate .js and .d.ts files
-    const componentsImport = includeComponentsStub ? ", AnyComponents" : "";
-    const componentsExportDTS = includeComponentsStub
-      ? "\nexport declare const components: AnyComponents;"
-      : "";
-    const componentsExportJS = includeComponentsStub
-      ? `\nimport { componentsGeneric } from "convex/server";\nexport const components = componentsGeneric();`
-      : "";
+    // Use preserved component types if available, otherwise use stub if requested
+    let componentsImport = "";
+    let componentsExportDTS = "";
+    let componentsExportJS = "";
+
+    if (preservedComponentTypes) {
+      // Use preserved real component types (no need for AnyComponents import)
+      componentsExportDTS = `\n${preservedComponentTypes}`;
+      // For JS runtime, still use componentsGeneric()
+      componentsExportJS = `\nimport { componentsGeneric } from "convex/server";\nexport const components = componentsGeneric();`;
+    } else if (includeComponentsStub) {
+      // Fall back to AnyComponents stub
+      componentsImport = ", AnyComponents";
+      componentsExportDTS = "\nexport declare const components: AnyComponents;";
+      componentsExportJS = `\nimport { componentsGeneric } from "convex/server";\nexport const components = componentsGeneric();`;
+    }
 
     const apiDTS = `${header("Generated `api` utility.")}
   import type { ApiFromModules, FilterApi, FunctionReference${componentsImport} } from "convex/server";
@@ -143,13 +158,30 @@ export function apiCodegen(
     };
   } else {
     // Generate combined .ts file
-    const componentsImportTS = includeComponentsStub ? ", AnyComponents" : "";
-    const componentsImportRuntimeTS = includeComponentsStub
-      ? ", componentsGeneric"
-      : "";
-    const componentsExportTS = includeComponentsStub
-      ? `\n\nexport const components: AnyComponents = componentsGeneric();`
-      : "";
+    // Use preserved component types if available, otherwise use stub if requested
+    let componentsImportTS = "";
+    let componentsImportRuntimeTS = "";
+    let componentsExportTS = "";
+
+    if (preservedComponentTypes) {
+      // For preserved types, we need componentsGeneric for runtime but use preserved type
+      componentsImportRuntimeTS = ", componentsGeneric";
+      // Extract just the type annotation using TypeScript AST
+      const typeAnnotation = extractComponentTypeAnnotation(
+        preservedComponentTypes,
+      );
+      if (typeAnnotation) {
+        componentsExportTS = `\n\nexport const components: ${typeAnnotation} = componentsGeneric() as any;`;
+      } else {
+        // Fallback: use as-is (shouldn't happen with well-formed input)
+        componentsExportTS = `\n\n${preservedComponentTypes.replace("declare ", "")}`;
+      }
+    } else if (includeComponentsStub) {
+      // Fall back to AnyComponents stub
+      componentsImportTS = ", AnyComponents";
+      componentsImportRuntimeTS = ", componentsGeneric";
+      componentsExportTS = `\n\nexport const components: AnyComponents = componentsGeneric();`;
+    }
 
     const apiTS = `${header("Generated `api` utility.")}
 import type { ApiFromModules, FilterApi, FunctionReference${componentsImportTS} } from "convex/server";
