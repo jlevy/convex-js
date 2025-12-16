@@ -224,6 +224,25 @@ export async function doCodegen(
     );
     writtenFiles.push(...apiFiles);
 
+    // If we preserved component types, make sure the generated api file didn't
+    // downgrade them back to AnyComponents. This post-pass keeps offline runs
+    // idempotent even if upstream generation emitted a stub.
+    if (opts?.offline && preservedComponentTypes) {
+      const apiPath = useTypeScript
+        ? path.join(codegenDir, "api.ts")
+        : path.join(codegenDir, "api.d.ts");
+      if (ctx.fs.exists(apiPath)) {
+        const apiContents = ctx.fs.readUtf8File(apiPath);
+        if (apiContents.includes("export declare const components: AnyComponents;")) {
+          const updated = apiContents.replace(
+            "export declare const components: AnyComponents;",
+            preservedComponentTypes.trim(),
+          );
+          ctx.fs.writeUtf8File(apiPath, updated);
+        }
+      }
+    }
+
     // Cleanup any files that weren't written in this run.
     // Skip cleanup in debug mode since we don't actually write files in that mode.
     if (!opts?.debug) {
