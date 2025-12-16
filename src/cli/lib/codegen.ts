@@ -168,6 +168,7 @@ export async function doCodegen(
     // backend-connected codegen run. This allows offline mode to maintain full
     // component type safety.
     let preservedComponentTypes: string | undefined;
+    let warnedMissingComponentTypes = false;
     if (opts?.offline) {
       const existingApiPath = useTypeScript
         ? path.join(codegenDir, "api.ts")
@@ -179,16 +180,28 @@ export async function doCodegen(
           if (hasRealComponentTypes(componentTypes)) {
             preservedComponentTypes = componentTypes!;
             logMessage(
-              ctx,
               chalkStderr.blue(
-                "ℹ️  Preserving existing component types from previous codegen",
+                "[offline] Preserving existing component types from previous codegen",
               ),
             );
+          } else {
+            warnedMissingComponentTypes = true;
           }
         } catch {
           // If extraction fails, just use the stub
+          warnedMissingComponentTypes = true;
           logVerbose(ctx, "Could not extract existing component types");
         }
+      } else {
+        warnedMissingComponentTypes = true;
+      }
+
+      if (warnedMissingComponentTypes) {
+        logMessage(
+          chalkStderr.yellow(
+            "[offline] No preserved component types found; component calls will use AnyComponents. Run codegen online once to capture component types.",
+          ),
+        );
       }
     }
 
