@@ -179,8 +179,8 @@
     }
   },
   "bin": {
-    "convex": "bin/main-dev",
-    "convex-bundled": "bin/main.js"
+    "convex": "bin/main.js",
+    "convex-dev": "bin/main-dev"
   },
   "scripts": {
     "build": "python3 scripts/build.py 2>&1",
@@ -189,7 +189,7 @@
     "lint": "eslint .",
     "format": "prettier -w . && eslint --fix .",
     "format-check": "prettier -c . && eslint .",
-    "prepare": "npm run build",
+    "prepare:local": "npm run build",
     "prepack": "node scripts/prepack.mjs",
     "postpack": "node scripts/postpack.mjs",
     "test": "vitest --silent",

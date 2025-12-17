@@ -1,9 +1,14 @@
 import path from "path";
 import prettier from "prettier";
+import { chalkStderr } from "chalk";
 import { withTmpDir, TempDir } from "../../bundler/fs.js";
 import { entryPoints } from "../../bundler/index.js";
 import { apiCodegen } from "../codegen_templates/api.js";
 import { apiCjsCodegen } from "../codegen_templates/api_cjs.js";
+import {
+  extractComponentTypes,
+  hasRealComponentTypes,
+} from "./componentTypePreservation.js";
 import {
   dynamicDataModelDTS,
   dynamicDataModelTS,
@@ -55,6 +60,7 @@ export type CodegenOptions = {
   liveComponentSources: boolean;
   debugNodeApis: boolean;
   systemUdfs: boolean;
+  offline: boolean;
   largeIndexDeletionCheck: LargeIndexDeletionCheck;
   codegenOnlyThisComponent?: string | undefined;
 };
@@ -112,7 +118,12 @@ export async function doCodegen(
   ctx: Context,
   functionsDir: string,
   typeCheckMode: TypeCheckMode,
-  opts?: { dryRun?: boolean; generateCommonJSApi?: boolean; debug?: boolean },
+  opts?: {
+    dryRun?: boolean;
+    generateCommonJSApi?: boolean;
+    debug?: boolean;
+    offline?: boolean;
+  },
 ) {
   const { projectConfig } = await readProjectConfig(ctx);
   const codegenDir = await prepareForCodegen(ctx, functionsDir, opts);
@@ -152,6 +163,52 @@ export async function doCodegen(
     // The `api.d.ts` file imports from the developer's modules, which then
     // import from `server.d.ts`. Note that there's a cycle here, since the
     // developer's modules could also import from the `api.{js,d.ts}` files.
+
+    // In offline mode, try to preserve existing component types from a previous
+    // backend-connected codegen run. This allows offline mode to maintain full
+    // component type safety.
+    let preservedComponentTypes: string | undefined;
+    let warnedMissingComponentTypes = false;
+    if (opts?.offline) {
+      const apiCandidates = [
+        path.join(codegenDir, "api.ts"),
+        path.join(codegenDir, "api.d.ts"),
+      ];
+      const existingApiPath = apiCandidates.find((candidate) =>
+        ctx.fs.exists(candidate),
+      );
+      if (existingApiPath) {
+        try {
+          const existingContent = ctx.fs.readUtf8File(existingApiPath);
+          const componentTypes = extractComponentTypes(existingContent);
+          if (hasRealComponentTypes(componentTypes)) {
+            preservedComponentTypes = componentTypes!;
+            logMessage(
+              chalkStderr.blue(
+                "[offline] Preserving existing component types from previous codegen",
+              ),
+            );
+          } else {
+            warnedMissingComponentTypes = true;
+          }
+        } catch {
+          // If extraction fails, just use the stub
+          warnedMissingComponentTypes = true;
+          logVerbose(ctx, "Could not extract existing component types");
+        }
+      } else {
+        warnedMissingComponentTypes = true;
+      }
+
+      if (warnedMissingComponentTypes) {
+        logMessage(
+          chalkStderr.yellow(
+            "[offline] No preserved component types found; component calls will use AnyComponents. Run codegen online once to capture component types.",
+          ),
+        );
+      }
+    }
+
     const apiFiles = await doApiCodegen(
       ctx,
       tmpDir,
@@ -159,9 +216,32 @@ export async function doCodegen(
       codegenDir,
       useTypeScript,
       generateCommonJSApi,
-      opts,
+      {
+        ...opts,
+        includeComponentsStub: opts?.offline ?? false,
+        preservedComponentTypes,
+      },
     );
     writtenFiles.push(...apiFiles);
+
+    // If we preserved component types, make sure the generated api file didn't
+    // downgrade them back to AnyComponents. This post-pass keeps offline runs
+    // idempotent even if upstream generation emitted a stub.
+    if (opts?.offline && preservedComponentTypes) {
+      const apiPath = useTypeScript
+        ? path.join(codegenDir, "api.ts")
+        : path.join(codegenDir, "api.d.ts");
+      if (ctx.fs.exists(apiPath)) {
+        const apiContents = ctx.fs.readUtf8File(apiPath);
+        if (apiContents.includes("export declare const components: AnyComponents;")) {
+          const updated = apiContents.replace(
+            "export declare const components: AnyComponents;",
+            preservedComponentTypes.trim(),
+          );
+          ctx.fs.writeUtf8File(apiPath, updated);
+        }
+      }
+    }
 
     // Cleanup any files that weren't written in this run.
     // Skip cleanup in debug mode since we don't actually write files in that mode.
@@ -774,7 +854,12 @@ async function doApiCodegen(
   codegenDir: string,
   useTypeScript: boolean,
   generateCommonJSApi: boolean,
-  opts?: { dryRun?: boolean; debug?: boolean },
+  opts?: {
+    dryRun?: boolean;
+    debug?: boolean;
+    includeComponentsStub?: boolean;
+    preservedComponentTypes?: string | undefined;
+  },
 ) {
   const absModulePaths = await entryPoints(ctx, functionsDir);
   const modulePaths = absModulePaths
@@ -784,7 +869,11 @@ async function doApiCodegen(
   const writtenFiles: string[] = [];
 
   if (!useTypeScript) {
-    const apiContent = apiCodegen(modulePaths, { useTypeScript: false });
+    const apiContent = apiCodegen(modulePaths, {
+      useTypeScript: false,
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+      preservedComponentTypes: opts?.preservedComponentTypes,
+    });
     await writeFormattedFile(
       ctx,
       tmpDir,
@@ -824,7 +913,11 @@ async function doApiCodegen(
       writtenFiles.push("api_cjs.cjs", "api_cjs.d.cts");
     }
   } else {
-    const apiContent = apiCodegen(modulePaths, { useTypeScript: true });
+    const apiContent = apiCodegen(modulePaths, {
+      useTypeScript: true,
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+      preservedComponentTypes: opts?.preservedComponentTypes,
+    });
     await writeFormattedFile(
       ctx,
       tmpDir,

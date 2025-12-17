@@ -93,7 +93,58 @@ export async function runCodegen(
     });
   }
 
-  if (!options.systemUdfs) {
+  if (options.offline || options.systemUdfs) {
+    // Offline mode: generate types locally without backend
+    if (options.offline) {
+      logMessage(
+        "Offline mode: Generating types from local files without backend connection.",
+      );
+
+      // Warn if static codegen config is set
+      if (
+        projectConfig.codegen.staticApi ||
+        projectConfig.codegen.staticDataModel
+      ) {
+        logMessage(
+          chalkStderr.yellow("Static codegen config ignored in offline mode."),
+        );
+      }
+
+      // Check if project uses components and warn
+      const componentDir = isComponentDirectory(
+        ctx,
+        functionsDirectoryPath,
+        true,
+      );
+      if (
+        componentDir.kind === "ok" &&
+        componentDir.component.definitionPath &&
+        !componentDir.component.isRootWithoutConfig
+      ) {
+        logMessage(
+          chalkStderr.yellow(
+            "Component type safety unavailable in offline mode. Component calls will have 'any' type.",
+          ),
+        );
+      }
+    }
+
+    if (options.typecheck !== "disable") {
+      logMessage(chalkStderr.gray("Running TypeScript typecheck…"));
+    }
+
+    await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
+      dryRun: options.dryRun,
+      debug: options.debug,
+      generateCommonJSApi: options.commonjs,
+      offline: options.offline,
+    });
+
+    if (options.offline) {
+      logFinishedStep("Types generated successfully (offline mode).");
+    }
+  } else {
+    // Backend mode: use deployment for validation and codegen
     // Early exit for a better error message trying to use a preview key.
     if (deploymentSelection.kind === "preview") {
       return await ctx.crash({
@@ -129,16 +180,6 @@ export async function runCodegen(
         debugNodeApis: options.debugNodeApis,
       },
     );
-  } else {
-    if (options.typecheck !== "disable") {
-      logMessage(chalkStderr.gray("Running TypeScript typecheck…"));
-    }
-
-    await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
-      dryRun: options.dryRun,
-      debug: options.debug,
-      generateCommonJSApi: options.commonjs,
-    });
   }
 }
 
