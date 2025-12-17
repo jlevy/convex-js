@@ -858,7 +858,7 @@ async function doApiCodegen(
     dryRun?: boolean;
     debug?: boolean;
     includeComponentsStub?: boolean;
-    preservedComponentTypes?: string;
+    preservedComponentTypes?: string | undefined;
   },
 ) {
   const absModulePaths = await entryPoints(ctx, functionsDir);

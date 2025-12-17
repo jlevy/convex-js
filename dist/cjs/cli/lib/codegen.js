@@ -37,10 +37,12 @@ __export(codegen_exports, {
 module.exports = __toCommonJS(codegen_exports);
 var import_path = __toESM(require("path"), 1);
 var import_prettier = __toESM(require("prettier"), 1);
+var import_chalk = require("chalk");
 var import_fs = require("../../bundler/fs.js");
 var import_bundler = require("../../bundler/index.js");
 var import_api = require("../codegen_templates/api.js");
 var import_api_cjs = require("../codegen_templates/api_cjs.js");
+var import_componentTypePreservation = require("./componentTypePreservation.js");
 var import_dataModel = require("../codegen_templates/dataModel.js");
 var import_readme = require("../codegen_templates/readme.js");
 var import_server = require("../codegen_templates/server.js");
@@ -107,6 +109,45 @@ async function doCodegen(ctx, functionsDir2, typeCheckMode, opts) {
       opts
     );
     writtenFiles.push(...serverFiles);
+    let preservedComponentTypes;
+    let warnedMissingComponentTypes = false;
+    if (opts?.offline) {
+      const apiCandidates = [
+        import_path.default.join(codegenDir, "api.ts"),
+        import_path.default.join(codegenDir, "api.d.ts")
+      ];
+      const existingApiPath = apiCandidates.find(
+        (candidate) => ctx.fs.exists(candidate)
+      );
+      if (existingApiPath) {
+        try {
+          const existingContent = ctx.fs.readUtf8File(existingApiPath);
+          const componentTypes = (0, import_componentTypePreservation.extractComponentTypes)(existingContent);
+          if ((0, import_componentTypePreservation.hasRealComponentTypes)(componentTypes)) {
+            preservedComponentTypes = componentTypes;
+            (0, import_log.logMessage)(
+              import_chalk.chalkStderr.blue(
+                "[offline] Preserving existing component types from previous codegen"
+              )
+            );
+          } else {
+            warnedMissingComponentTypes = true;
+          }
+        } catch {
+          warnedMissingComponentTypes = true;
+          (0, import_log.logVerbose)(ctx, "Could not extract existing component types");
+        }
+      } else {
+        warnedMissingComponentTypes = true;
+      }
+      if (warnedMissingComponentTypes) {
+        (0, import_log.logMessage)(
+          import_chalk.chalkStderr.yellow(
+            "[offline] No preserved component types found; component calls will use AnyComponents. Run codegen online once to capture component types."
+          )
+        );
+      }
+    }
     const apiFiles = await doApiCodegen(
       ctx,
       tmpDir,
@@ -114,9 +155,26 @@ async function doCodegen(ctx, functionsDir2, typeCheckMode, opts) {
       codegenDir,
       useTypeScript,
       generateCommonJSApi,
-      { ...opts, includeComponentsStub: opts?.offline ?? false }
+      {
+        ...opts,
+        includeComponentsStub: opts?.offline ?? false,
+        preservedComponentTypes
+      }
     );
     writtenFiles.push(...apiFiles);
+    if (opts?.offline && preservedComponentTypes) {
+      const apiPath = useTypeScript ? import_path.default.join(codegenDir, "api.ts") : import_path.default.join(codegenDir, "api.d.ts");
+      if (ctx.fs.exists(apiPath)) {
+        const apiContents = ctx.fs.readUtf8File(apiPath);
+        if (apiContents.includes("export declare const components: AnyComponents;")) {
+          const updated = apiContents.replace(
+            "export declare const components: AnyComponents;",
+            preservedComponentTypes.trim()
+          );
+          ctx.fs.writeUtf8File(apiPath, updated);
+        }
+      }
+    }
     if (!opts?.debug) {
       for (const file of ctx.fs.listDir(codegenDir)) {
         if (!writtenFiles.includes(file.name)) {
@@ -517,7 +575,8 @@ async function doApiCodegen(ctx, tmpDir, functionsDir2, codegenDir, useTypeScrip
   if (!useTypeScript) {
     const apiContent = (0, import_api.apiCodegen)(modulePaths, {
       useTypeScript: false,
-      includeComponentsStub: opts?.includeComponentsStub ?? false
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+      preservedComponentTypes: opts?.preservedComponentTypes
     });
     await writeFormattedFile(
       ctx,
@@ -559,7 +618,8 @@ async function doApiCodegen(ctx, tmpDir, functionsDir2, codegenDir, useTypeScrip
   } else {
     const apiContent = (0, import_api.apiCodegen)(modulePaths, {
       useTypeScript: true,
-      includeComponentsStub: opts?.includeComponentsStub ?? false
+      includeComponentsStub: opts?.includeComponentsStub ?? false,
+      preservedComponentTypes: opts?.preservedComponentTypes
     });
     await writeFormattedFile(
       ctx,

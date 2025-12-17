@@ -81,7 +81,7 @@ export function apiCodegen(
   opts?: {
     useTypeScript?: boolean;
     includeComponentsStub?: boolean;
-    preservedComponentTypes?: string;
+    preservedComponentTypes?: string | undefined;
   },
 ) {
   const useTypeScript = opts?.useTypeScript ?? false;

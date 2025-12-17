@@ -63,9 +63,7 @@ export async function runCodegen(ctx, deploymentSelection, options) {
       );
       if (projectConfig.codegen.staticApi || projectConfig.codegen.staticDataModel) {
         logMessage(
-          chalkStderr.yellow(
-            "Static codegen config ignored in offline mode."
-          )
+          chalkStderr.yellow("Static codegen config ignored in offline mode.")
         );
       }
       const componentDir = isComponentDirectory(

@@ -24,6 +24,7 @@ __export(api_exports, {
 });
 module.exports = __toCommonJS(api_exports);
 var import_common = require("./common.js");
+var import_componentTypePreservation = require("../lib/componentTypePreservation.js");
 function importPath(modulePath) {
   const filePath = modulePath.replace(/\\/g, "/");
   const lastDot = filePath.lastIndexOf(".");
@@ -90,12 +91,24 @@ function moduleIdentifier(modulePath) {
 function apiCodegen(modulePaths, opts) {
   const useTypeScript = opts?.useTypeScript ?? false;
   const includeComponentsStub = opts?.includeComponentsStub ?? false;
+  const preservedComponentTypes = opts?.preservedComponentTypes;
   if (!useTypeScript) {
-    const componentsImport = includeComponentsStub ? ", AnyComponents" : "";
-    const componentsExportDTS = includeComponentsStub ? "\nexport declare const components: AnyComponents;" : "";
-    const componentsExportJS = includeComponentsStub ? `
+    let componentsImport = "";
+    let componentsExportDTS = "";
+    let componentsExportJS = "";
+    if (preservedComponentTypes) {
+      componentsExportDTS = `
+${preservedComponentTypes}`;
+      componentsExportJS = `
 import { componentsGeneric } from "convex/server";
-export const components = componentsGeneric();` : "";
+export const components = componentsGeneric();`;
+    } else if (includeComponentsStub) {
+      componentsImport = ", AnyComponents";
+      componentsExportDTS = "\nexport declare const components: AnyComponents;";
+      componentsExportJS = `
+import { componentsGeneric } from "convex/server";
+export const components = componentsGeneric();`;
+    }
     const apiDTS = `${(0, import_common.header)("Generated `api` utility.")}
   import type { ApiFromModules, FilterApi, FunctionReference${componentsImport} } from "convex/server";
   ${modulePaths.map(
@@ -139,11 +152,30 @@ export const components = componentsGeneric();` : "";
       JS: apiJS
     };
   } else {
-    const componentsImportTS = includeComponentsStub ? ", AnyComponents" : "";
-    const componentsImportRuntimeTS = includeComponentsStub ? ", componentsGeneric" : "";
-    const componentsExportTS = includeComponentsStub ? `
+    let componentsImportTS = "";
+    let componentsImportRuntimeTS = "";
+    let componentsExportTS = "";
+    if (preservedComponentTypes) {
+      componentsImportRuntimeTS = ", componentsGeneric";
+      const typeAnnotation = (0, import_componentTypePreservation.extractComponentTypeAnnotation)(
+        preservedComponentTypes
+      );
+      if (typeAnnotation) {
+        componentsExportTS = `
 
-export const components: AnyComponents = componentsGeneric();` : "";
+export const components: ${typeAnnotation} = componentsGeneric() as any;`;
+      } else {
+        componentsExportTS = `
+
+${preservedComponentTypes.replace("declare ", "")}`;
+      }
+    } else if (includeComponentsStub) {
+      componentsImportTS = ", AnyComponents";
+      componentsImportRuntimeTS = ", componentsGeneric";
+      componentsExportTS = `
+
+export const components: AnyComponents = componentsGeneric();`;
+    }
     const apiTS = `${(0, import_common.header)("Generated `api` utility.")}
 import type { ApiFromModules, FilterApi, FunctionReference${componentsImportTS} } from "convex/server";
 import { anyApi${componentsImportRuntimeTS} } from "convex/server";
